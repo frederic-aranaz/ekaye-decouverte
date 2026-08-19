@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Découverte EKAYE</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#141210">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Découverte">
+  <!-- iOS ignore les icônes SVG du manifest : sans ce PNG, « Ajouter à l'écran
+       d'accueil » depuis un iPhone prend une capture de la page comme icône. -->
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" href="icone.svg" type="image/svg+xml">
+  <style>
+    /* Palette reprise de la page de vente EKAYE : c'est la même main qui tient le
+       téléphone, les deux outils ne doivent pas avoir l'air de venir d'ateliers
+       différents. Ambre #c9882a = couleur d'ÉCRAN (plus vive que le doré imprimé
+       #86673C de la charte, qui lui est réservé aux emails et aux imprimés). */
+    :root {
+      --ek:       #c9882a;
+      --ek-dark:  #f0b84a;
+      --bg:       #141210;
+      --bg-card:  #1e1b17;
+      --bg-card2: #252118;
+      --text:     #eeece8;
+      --text-2:   #d8c8a8;
+      --text-3:   #a08860;
+      --border:   rgba(201,136,42,0.25);
+      --borderdiv:rgba(201,136,42,0.14);
+      --ok:       #7fb069;
+      --warn:     #d99b3d;
+      --err:      #cf6b5a;
+      --shadow:   0 2px 12px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.3);
+      --r:        12px;
+      --font:     'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    .wrap { max-width: 700px; margin: 0 auto; padding-bottom: 3rem; }
+
+    /* ── Barre du haut ── */
+    .topbar {
+      background: #1a1510;
+      padding: 0.8rem 1rem;
+      display: flex; align-items: center; gap: 12px;
+      position: sticky; top: 0; z-index: 10;
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 2px 16px rgba(0,0,0,0.5);
+      padding-top: max(0.8rem, env(safe-area-inset-top));
+    }
+    .topbar-icon {
+      width: 36px; height: 36px; border-radius: 6px;
+      flex-shrink: 0; font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(201,136,42,0.15);
+      border: 1px solid rgba(201,136,42,0.3);
+    }
+    .topbar h1  { font-size: 15px; font-weight: 600; color: #e8d8b0; }
+    .topbar-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+    .etat-reseau {
+      margin-left: auto; font-size: 10px; font-weight: 700;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 4px 9px; border-radius: 20px; white-space: nowrap;
+    }
+    .etat-reseau.en-ligne   { color: var(--ok);   background: rgba(127,176,105,0.12); border: 1px solid rgba(127,176,105,0.3); }
+    .etat-reseau.hors-ligne { color: var(--warn); background: rgba(217,155,61,0.12);  border: 1px solid rgba(217,155,61,0.35); }
+
+    /* ── Sections ── */
+    .section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      margin: 0.9rem 0.75rem;
+      padding: 1rem;
+      box-shadow: var(--shadow);
+    }
+    .sec-title {
+      font-size: 12px; font-weight: 700; color: var(--ek-dark);
+      text-transform: uppercase; letter-spacing: 0.07em;
+      margin-bottom: 0.85rem;
+      display: flex; align-items: center; gap: 7px;
+    }
+
+    /* ── Champs ── */
+    .fb { margin-bottom: 0.85rem; }
+    .fb:last-child { margin-bottom: 0; }
+    .fl {
+      font-size: 12px; color: var(--text-2); margin-bottom: 5px;
+      font-weight: 600; letter-spacing: 0.02em;
+    }
+    .fl .opt { color: var(--text-3); font-weight: 400; text-transform: none; letter-spacing: 0; }
+    .fv, textarea, select {
+      width: 100%;
+      background: var(--bg-card2);
+      border: 1px solid var(--borderdiv);
+      border-radius: 8px;
+      color: var(--text);
+      /* 16px minimum : en dessous, iOS zoome tout seul au premier tap dans un champ
+         et l'utilisateur se retrouve à devoir dézoomer entre chaque saisie. */
+      font-size: 16px;
+      font-family: var(--font);
+      padding: 0.7rem 0.75rem;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .fv:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: rgba(201,136,42,0.55);
+      box-shadow: 0 0 0 2px rgba(201,136,42,0.15);
+    }
+    textarea { min-height: 92px; resize: vertical; line-height: 1.5; }
+    .fv::placeholder, textarea::placeholder { color: #6d6154; }
+    .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+    .duo-cp { display: grid; grid-template-columns: 110px 1fr; gap: 0.6rem; }
+
+    /* ── Choix en pastilles ── */
+    /* Un <select> demande trois gestes (ouvrir, choisir, valider) et masque les
+       options tant qu'il est fermé. Sur un stand, avec un visiteur qui attend,
+       les pastilles se tapent en un geste et se lisent sans les ouvrir. */
+    .pills { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .pill {
+      flex: 1 1 auto;
+      min-height: 44px;               /* cible tactile confortable */
+      padding: 0.6rem 0.85rem;
+      background: var(--bg-card2);
+      border: 1px solid var(--borderdiv);
+      border-radius: 9px;
+      color: var(--text-2);
+      font-family: var(--font);
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+      text-align: center;
+    }
+    .pill:active { transform: scale(0.98); }
+    .pill.on {
+      background: rgba(201,136,42,0.18);
+      border-color: rgba(201,136,42,0.6);
+      color: var(--ek-dark);
+      font-weight: 600;
+    }
+
+    /* ── Suggestions de commune (geo.api.gouv.fr) ── */
+    /* Repris à l'identique de la page de vente du registre : même geste, même rendu. */
+    .ville-suggestions {
+      display: none;
+      position: absolute; left: 0; right: 0; top: 100%;
+      z-index: 20; margin-top: 4px;
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .ville-suggestions.visible { display: block; }
+    .ville-suggestions button {
+      display: block; width: 100%; text-align: left;
+      padding: 11px 14px; background: none; border: none;
+      border-bottom: 1px solid var(--borderdiv);
+      color: var(--text); font-size: 15px; font-family: var(--font);
+      cursor: pointer;
+    }
+    .ville-suggestions button:last-child { border-bottom: none; }
+    .ville-suggestions button:active, .ville-suggestions button:hover { background: rgba(201,136,42,0.12); }
+    .champ-suggest { position: relative; }
+
+    /* ── Case à cocher RGPD ── */
+    .rgpd {
+      background: var(--bg-card2);
+      border: 1px solid var(--borderdiv);
+      border-radius: 9px;
+      padding: 0.85rem;
+    }
+    .rgpd.on { border-color: rgba(201,136,42,0.5); background: rgba(201,136,42,0.08); }
+    .rgpd label { display: flex; gap: 0.65rem; align-items: flex-start; cursor: pointer; }
+    .rgpd input[type=checkbox] {
+      width: 22px; height: 22px; margin-top: 1px; flex-shrink: 0;
+      accent-color: var(--ek);
+    }
+    .rgpd-txt { font-size: 14px; color: var(--text); line-height: 1.45; }
+    .rgpd-note {
+      font-size: 11.5px; color: var(--text-3); line-height: 1.55;
+      margin-top: 0.6rem; padding-top: 0.6rem;
+      border-top: 1px solid var(--borderdiv);
+    }
+
+    /* ── Boutons ── */
+    .btn-principal {
+      width: calc(100% - 1.5rem);
+      margin: 0.25rem 0.75rem 0;
+      padding: 1rem;
+      background: linear-gradient(180deg, var(--ek) 0%, #b0741f 100%);
+      border: none; border-radius: var(--r);
+      color: #1a1409;
+      font-family: var(--font);
+      font-size: 16px; font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+    }
+    .btn-principal:active { transform: scale(0.99); }
+    .btn-principal:disabled { opacity: 0.5; cursor: default; }
+    .btn-second {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-2);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 0.55rem 0.9rem;
+      cursor: pointer;
+    }
+
+    /* ── Messages ── */
+    .msg {
+      margin: 0.9rem 0.75rem;
+      padding: 0.9rem 1rem;
+      border-radius: var(--r);
+      font-size: 14px; line-height: 1.5;
+      display: none;
+    }
+    .msg.ok   { display: block; background: rgba(127,176,105,0.12); border: 1px solid rgba(127,176,105,0.4); color: #a8d18f; }
+    .msg.err  { display: block; background: rgba(207,107,90,0.12);  border: 1px solid rgba(207,107,90,0.4);  color: #e59d8d; }
+    .msg.warn { display: block; background: rgba(217,155,61,0.12);  border: 1px solid rgba(217,155,61,0.4);  color: #e8bd77; }
+
+    /* ── File d'attente ── */
+    .attente {
+      margin: 0.9rem 0.75rem;
+      background: rgba(217,155,61,0.08);
+      border: 1px solid rgba(217,155,61,0.35);
+      border-radius: var(--r);
+      padding: 0.9rem 1rem;
+      display: none;
+    }
+    .attente-titre {
+      font-size: 13px; font-weight: 700; color: var(--warn);
+      margin-bottom: 0.7rem;
+    }
+    .attente-ligne {
+      display: flex; justify-content: space-between; align-items: center; gap: 0.6rem;
+      font-size: 13px; color: var(--text-2);
+      padding: 0.5rem 0;
+      border-top: 1px solid rgba(217,155,61,0.18);
+    }
+    .attente-erreur { font-size: 11.5px; color: var(--err); margin-top: 3px; }
+    .attente-suppr {
+      background: none; border: 1px solid rgba(207,107,90,0.4);
+      color: var(--err); border-radius: 6px;
+      font-size: 11px; padding: 4px 8px; cursor: pointer; flex-shrink: 0;
+      font-family: var(--font);
+    }
+    .attente-actions { margin-top: 0.75rem; display: flex; gap: 0.5rem; }
+
+    /* ── Réglages ── */
+    details.reglages {
+      margin: 1.25rem 0.75rem 0;
+      border: 1px solid var(--borderdiv);
+      border-radius: var(--r);
+      background: rgba(30,27,23,0.6);
+    }
+    details.reglages summary {
+      padding: 0.8rem 1rem;
+      font-size: 12.5px; color: var(--text-3);
+      cursor: pointer; list-style: none;
+    }
+    details.reglages summary::-webkit-details-marker { display: none; }
+    details.reglages[open] summary { border-bottom: 1px solid var(--borderdiv); color: var(--text-2); }
+    .reglages-corps { padding: 1rem; }
+    .aide { font-size: 11.5px; color: var(--text-3); line-height: 1.55; margin-top: 0.4rem; }
+    .oblig { color: var(--ek); }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="topbar-icon">&#9670;</div>
+    <div>
+      <h1>Découverte EKAYE</h1>
+      <div class="topbar-sub" id="sousTitre">Prise de contact</div>
+    </div>
+    <div class="etat-reseau en-ligne" id="etatReseau">en ligne</div>
+  </div>
+
+  <div class="msg" id="message"></div>
+  <div class="attente" id="attenteBox"></div>
+
+  <!-- ── Contexte de la rencontre ───────────────────────────────────────────
+       En tête de formulaire parce que c'est ce qui se règle UNE FOIS en arrivant
+       sur le stand : ces champs ne sont pas remis à zéro entre deux visiteurs. -->
+  <div class="section">
+    <div class="sec-title">&#128205; Qui, où et quand</div>
+
+    <!-- Le sélecteur est ici, en clair, et non enterré dans les réglages : un téléphone
+         change de main dans la journée, et une fiche attribuée au mauvais nom ne se
+         rattrape qu'à la main dans le classeur. Le choix reste posé entre deux
+         visiteurs, il ne se retape pas à chaque fiche. -->
+    <div class="fb">
+      <div class="fl">Découverte faite par <span class="oblig">*</span></div>
+      <div class="pills" id="pillsSaisiPar"></div>
+    </div>
+
+    <div class="fb">
+      <div class="fl">Lieu <span class="oblig">*</span></div>
+      <div class="pills" id="pillsLieu"></div>
+    </div>
+
+    <div class="fb" id="blocExpo" style="display:none">
+      <div class="fl">Nom de l'exposition <span class="oblig">*</span></div>
+      <input type="text" class="fv" id="nomExpo" list="listeExpos"
+             placeholder="ex. Salon des métiers d'art de Bergerac" autocomplete="off">
+      <datalist id="listeExpos"></datalist>
+      <div class="aide">Les noms déjà utilisés sont proposés à la saisie.</div>
+    </div>
+
+    <div class="fb">
+      <div class="fl">Date du contact</div>
+      <input type="date" class="fv" id="dateContact">
+      <div class="aide">Le jour de la rencontre, même si la fiche part plus tard.</div>
+    </div>
+  </div>
+
+  <!-- ── Objet de la demande ── -->
+  <div class="section">
+    <div class="sec-title">&#128172; Sa demande</div>
+
+    <div class="fb">
+      <div class="fl">Thématique <span class="oblig">*</span></div>
+      <div class="pills" id="pillsThematique"></div>
+    </div>
+
+    <div class="fb" id="blocPrecision" style="display:none">
+      <div class="fl">Préciser <span class="oblig">*</span></div>
+      <input type="text" class="fv" id="precision" placeholder="De quoi s'agit-il ?">
+    </div>
+
+    <div class="fb">
+      <div class="fl">Détail <span class="opt">— facultatif</span></div>
+      <textarea id="demande" placeholder="Ce qu'il ou elle recherche, dimensions, délai, budget évoqué…"></textarea>
+    </div>
+  </div>
+
+  <!-- ── Coordonnées ── -->
+  <div class="section">
+    <div class="sec-title">&#128100; Ses coordonnées</div>
+
+    <div class="fb duo">
+      <div>
+        <div class="fl">Nom</div>
+        <input type="text" class="fv" id="nom" autocomplete="family-name" autocapitalize="words">
+      </div>
+      <div>
+        <div class="fl">Prénom</div>
+        <input type="text" class="fv" id="prenom" autocomplete="given-name" autocapitalize="words">
+      </div>
+    </div>
+
+    <div class="fb">
+      <div class="fl">Téléphone</div>
+      <!-- type=tel : ouvre le pavé numérique, pas le clavier alphabétique -->
+      <input type="tel" class="fv" id="telephone" autocomplete="tel" placeholder="06 12 34 56 78">
+    </div>
+
+    <div class="fb">
+      <div class="fl">Email</div>
+      <input type="email" class="fv" id="email" autocomplete="email"
+             autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="nom@exemple.fr">
+    </div>
+
+    <div class="fb">
+      <div class="fl">Adresse <span class="opt">— facultatif</span></div>
+      <input type="text" class="fv" id="adresse" autocomplete="street-address" placeholder="N° et rue">
+    </div>
+
+    <div class="fb duo-cp">
+      <div class="champ-suggest">
+        <div class="fl">Code postal</div>
+        <input type="text" class="fv" id="codePostal" inputmode="numeric"
+               autocomplete="postal-code" maxlength="10" placeholder="24100">
+        <div class="ville-suggestions" id="villeSuggestions"></div>
+      </div>
+      <div class="champ-suggest">
+        <div class="fl">Ville</div>
+        <input type="text" class="fv" id="ville" autocomplete="address-level2" autocapitalize="words">
+        <div class="ville-suggestions" id="communeSuggestions"></div>
+      </div>
+    </div>
+
+    <div class="aide" style="margin-top:0.75rem">
+      Au minimum un nom ou un moyen de rappel (téléphone ou email).
+    </div>
+  </div>
+
+  <!-- ── Consentement ── -->
+  <div class="section">
+    <div class="sec-title">&#9993; Rester en contact</div>
+
+    <div class="rgpd" id="blocRgpd">
+      <label>
+        <input type="checkbox" id="accordRecontact">
+        <span class="rgpd-txt">
+          Accepte de recevoir les actualités d'EKAYE
+          <span style="color:var(--text-3)">(nouvelles créations, expositions, atelier)</span>
+        </span>
+      </label>
+      <div class="rgpd-note" id="noteRgpd">
+        À cocher <strong>devant la personne</strong>, jamais à sa place. Un email de
+        confirmation lui sera envoyé : tant qu'elle n'aura pas cliqué dedans, elle ne
+        recevra <strong>aucune</strong> newsletter. L'email est alors obligatoire.
+      </div>
+    </div>
+  </div>
+
+  <button type="button" class="btn-principal" id="btnEnregistrer" onclick="enregistrer()">
+    Enregistrer la fiche
+  </button>
+
+  <!-- ── Réglages ── -->
+  <details class="reglages">
+    <summary>&#9881; Réglages de l'appareil</summary>
+    <div class="reglages-corps">
+      <div class="fb">
+        <div class="fl">Adresse de l'application (URL /exec)</div>
+        <input type="text" class="fv" id="urlApi" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="fb">
+        <button type="button" class="btn-second" onclick="sauverReglages()">Enregistrer les réglages</button>
+        <button type="button" class="btn-second" onclick="changerCle()">Changer la clé d'accès</button>
+      </div>
+      <div class="aide" id="infoVersion"></div>
+    </div>
+  </details>
+
+</div>
+
+<script>
+  /* ── Configuration ─────────────────────────────────────────────────────── */
+  // URL /exec du déploiement Apps Script. Modifiable sur l'appareil via les réglages,
+  // ce qui évite de republier la page pour un simple redéploiement du script.
+  var URL_API_DEFAUT = 'https://script.google.com/macros/s/AKfycbw3cfEqn0p-OUw4Ur4AxoT38okfzZMi8b39WBhawWJ0vRCVebvD3T-UYTTGgjWKvEc-/exec';
+
+  var CLE_URL        = 'ekaye_decouverte_url_api';
+  var CLE_ACCES      = 'ekaye_decouverte_cle';
+  var CLE_SAISISSEUR = 'ekaye_decouverte_saisisseur';
+  var CLE_FILE       = 'ekaye_decouverte_file_attente';
+  var CLE_LISTES     = 'ekaye_decouverte_listes';
+  var CLE_CONTEXTE   = 'ekaye_decouverte_contexte';
+
+  // Repli utilisé au tout premier lancement hors ligne, avant le moindre contact avec
+  // le script. Ces listes font AUTORITÉ côté serveur, pas ici : une valeur qui aurait
+  // divergé serait refusée à l'envoi avec un message explicite, jamais écrite de travers.
+  var LISTES_REPLI = {
+    lieux: ['Atelier', 'Expo', 'Boutique LAM'],
+    thematiques: ['Création', 'Réparation', 'Demande de RDV atelier', 'Atelier', 'Autre'],
+    saisisseurs: ['Frédéric', 'Manuela'],
+    expos: []
+  };
+
+  var listes = LISTES_REPLI;
+  var choix = { saisiPar: '', lieu: '', thematique: '' };
+
+  function urlApi() { return localStorage.getItem(CLE_URL) || URL_API_DEFAUT; }
+
+  // Une URL non réglée n'est PAS une panne de réseau, et ne doit pas se déguiser en
+  // panne de réseau : `fetch('COLLER_ICI_URL_EXEC')` part vers une adresse relative du
+  // site, échoue, et la fiche tomberait en file d'attente avec le message « pas de
+  // réseau ». On empilerait des fiches toute la journée en croyant à une mauvaise
+  // couverture. Le contrôle se fait donc AVANT l'appel, et le dit franchement.
+  function urlApiConfiguree() {
+    return /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(urlApi().trim());
+  }
+
+  /* ── Clé d'accès ────────────────────────────────────────────────────────
+     Cette page est publique : une clé écrite dans son code source serait lisible
+     par n'importe qui. Elle est donc demandée une fois par appareil et conservée
+     en local, jamais publiée. */
+  function cleApi() {
+    var cle = localStorage.getItem(CLE_ACCES);
+    if (!cle) {
+      cle = (window.prompt('Clé d\'accès (donnée par Frédéric) :') || '').trim();
+      if (cle) localStorage.setItem(CLE_ACCES, cle);
+    }
+    return cle;
+  }
+  function oublierCle() { localStorage.removeItem(CLE_ACCES); }
+  function changerCle() {
+    oublierCle();
+    cleApi();
+    afficherMessage('ok', 'Clé enregistrée sur cet appareil.');
+  }
+
+  /* ── Appels au script ───────────────────────────────────────────────────
+     POST systématique : la clé n'a rien à faire dans une URL, où elle finirait
+     dans l'historique du navigateur et dans les journaux de Google.
+     Content-Type text/plain : évite la requête preflight CORS, qu'Apps Script
+     ne sait pas honorer. */
+  function appelApi(action, data) {
+    if (!urlApiConfiguree()) {
+      var errConf = new Error(
+        'L\'adresse de l\'application n\'est pas réglée sur cet appareil. ' +
+        'Ouvrez « Réglages de l\'appareil » en bas de page et collez l\'URL en /exec.');
+      errConf.configManquante = true;
+      return Promise.reject(errConf);
+    }
+    return fetch(urlApi(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: action, cle: cleApi(), data: data })
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (reponse) {
+      // Clé refusée : on l'oublie pour que la tentative suivante la redemande, plutôt
+      // que de boucler indéfiniment sur une clé fausse mémorisée.
+      if (reponse && reponse.authRefusee) {
+        oublierCle();
+        var err = new Error('Clé d\'accès refusée. Ressaisissez-la dans les réglages.');
+        err.authRefusee = true;
+        throw err;
+      }
+      return reponse;
+    });
+  }
+
+  /* ── File d'attente hors ligne ──────────────────────────────────────────
+     En expo, le réseau tombe précisément quand il y a du monde. Une fiche non
+     envoyée n'est PAS perdue : elle est gardée sur ce téléphone et repart toute
+     seule dès que la connexion revient. Chaque fiche garde son idFiche d'origine ;
+     le script reconnaît un identifiant déjà écrit et n'enregistre jamais deux fois,
+     même si la fiche est renvoyée des semaines plus tard. */
+  var envoiEnCours = false;
+
+  function fileAttente() {
+    try { return JSON.parse(localStorage.getItem(CLE_FILE) || '[]'); }
+    catch (e) { return []; }
+  }
+  function sauverFile(file) { localStorage.setItem(CLE_FILE, JSON.stringify(file)); }
+  function retirerDeLaFile(idFiche) {
+    sauverFile(fileAttente().filter(function (f) { return f.idFiche !== idFiche; }));
+  }
+
+  function genererIdFiche() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+    return 'f-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function mettreEnAttente(fiche) {
+    var file = fileAttente();
+    fiche.horodatage = Date.now();
+    file.push(fiche);
+    sauverFile(file);
+    afficherFileAttente();
+  }
+
+  function supprimerEnAttente(idFiche) {
+    if (!window.confirm('Supprimer définitivement cette fiche ? Elle ne sera jamais envoyée.')) return;
+    retirerDeLaFile(idFiche);
+    afficherFileAttente();
+  }
+
+  function afficherFileAttente() {
+    var box = document.getElementById('attenteBox');
+    var file = fileAttente();
+    if (file.length === 0) {
+      box.style.display = 'none';
+      box.innerHTML = '';
+      return;
+    }
+    box.style.display = 'block';
+    box.innerHTML =
+      '<div class="attente-titre">&#128337; ' + file.length +
+      ' fiche(s) en attente d\'envoi</div>' +
+      file.map(function (f) {
+        var heure = new Date(f.horodatage).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        var qui = ((f.prenom || '') + ' ' + (f.nom || '')).trim() || f.telephone || f.email || 'sans nom';
+        var resume = qui + ' — ' + (f.thematique || '?') + ' (' + heure + ')';
+        var erreur = f.derniereErreur ? '<div class="attente-erreur">&#9888; ' + echapper(f.derniereErreur) + '</div>' : '';
+        return '<div class="attente-ligne"><div>' + echapper(resume) + erreur + '</div>' +
+          '<button type="button" class="attente-suppr" onclick="supprimerEnAttente(\'' +
+          f.idFiche + '\')">Supprimer</button></div>';
+      }).join('') +
+      '<div class="attente-actions">' +
+      '<button type="button" class="btn-second" onclick="viderFileAttente()">Envoyer maintenant</button>' +
+      '</div>';
+  }
+
+  function viderFileAttente() {
+    if (envoiEnCours) return;
+    var ids = fileAttente().map(function (f) { return f.idFiche; });
+    if (ids.length === 0) return;
+    envoiEnCours = true;
+    envoyerPas_(ids, 0);
+  }
+
+  // Une fiche à la fois, jamais en parallèle : plus simple à raisonner, et la file
+  // reste courte en pratique. `ids` est un instantané pris au départ — une fiche
+  // refusée pour une raison définitive (email invalide…) n'est retentée qu'une fois
+  // par passe, jamais en boucle, et reste visible avec son erreur.
+  function envoyerPas_(ids, nbEnvoyees) {
+    if (ids.length === 0) {
+      envoiEnCours = false;
+      afficherFileAttente();
+      if (nbEnvoyees > 0) {
+        afficherMessage('ok', nbEnvoyees + ' fiche(s) envoyée(s).');
+      }
+      return;
+    }
+    var idFiche = ids[0];
+    var fiche = fileAttente().find(function (f) { return f.idFiche === idFiche; });
+    if (!fiche) { envoyerPas_(ids.slice(1), nbEnvoyees); return; }
+
+    appelApi('enregistrerFiche', fiche)
+      .then(function (resultat) {
+        // Un refus de clé remonte par .catch, jamais ici : une erreur à ce stade est
+        // donc toujours un refus de validation définitif, pas un problème de réseau.
+        if (resultat && resultat.erreur) {
+          var file = fileAttente();
+          var f = file.find(function (x) { return x.idFiche === idFiche; });
+          if (f) f.derniereErreur = resultat.erreur;
+          sauverFile(file);
+          envoyerPas_(ids.slice(1), nbEnvoyees);
+        } else {
+          retirerDeLaFile(idFiche);
+          envoyerPas_(ids.slice(1), nbEnvoyees + 1);
+        }
+      })
+      .catch(function (err) {
+        // Panne réseau, ou clé refusée : on s'arrête là pour cette passe. On réessaiera
+        // au retour de la connexion, au prochain chargement, ou sur « Envoyer maintenant ».
+        envoiEnCours = false;
+        afficherFileAttente();
+        if (err && err.authRefusee) afficherMessage('err', err.message);
+      });
+  }
+
+  /* ── Interface ──────────────────────────────────────────────────────────── */
+
+  function echapper(texte) {
+    return String(texte).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function afficherMessage(type, texte) {
+    var box = document.getElementById('message');
+    box.className = 'msg ' + type;
+    box.textContent = texte;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (type === 'ok') {
+      clearTimeout(afficherMessage.minuteur);
+      afficherMessage.minuteur = setTimeout(function () { box.className = 'msg'; }, 6000);
+    }
+  }
+
+  function construirePastilles(conteneurId, valeurs, champ, surChoix) {
+    var conteneur = document.getElementById(conteneurId);
+    conteneur.innerHTML = '';
+    valeurs.forEach(function (valeur) {
+      var bouton = document.createElement('button');
+      bouton.type = 'button';
+      bouton.className = 'pill' + (choix[champ] === valeur ? ' on' : '');
+      bouton.textContent = valeur;
+      bouton.onclick = function () {
+        choix[champ] = valeur;
+        Array.prototype.forEach.call(conteneur.children, function (b) {
+          b.classList.toggle('on', b.textContent === valeur);
+        });
+        if (surChoix) surChoix(valeur);
+      };
+      conteneur.appendChild(bouton);
+    });
+  }
+
+  function appliquerListes(nouvelles) {
+    listes = {
+      lieux: (nouvelles && nouvelles.lieux) || LISTES_REPLI.lieux,
+      thematiques: (nouvelles && nouvelles.thematiques) || LISTES_REPLI.thematiques,
+      saisisseurs: (nouvelles && nouvelles.saisisseurs) || LISTES_REPLI.saisisseurs,
+      expos: (nouvelles && nouvelles.expos) || []
+    };
+
+    construirePastilles('pillsSaisiPar', listes.saisisseurs, 'saisiPar', function (valeur) {
+      localStorage.setItem(CLE_SAISISSEUR, valeur);
+      majSousTitre();
+    });
+    construirePastilles('pillsLieu', listes.lieux, 'lieu', function (valeur) {
+      document.getElementById('blocExpo').style.display = (valeur === 'Expo') ? 'block' : 'none';
+      memoriserContexte();
+    });
+    construirePastilles('pillsThematique', listes.thematiques, 'thematique', function (valeur) {
+      document.getElementById('blocPrecision').style.display = (valeur === 'Autre') ? 'block' : 'none';
+    });
+
+    var datalist = document.getElementById('listeExpos');
+    datalist.innerHTML = listes.expos.map(function (nom) {
+      return '<option value="' + echapper(nom) + '">';
+    }).join('');
+  }
+
+  /* ── Contexte de journée ────────────────────────────────────────────────
+     Le lieu et le nom de l'expo ne changent pas entre deux visiteurs : les
+     resaisir vingt fois dans la journée est le meilleur moyen de finir par se
+     tromper. Ils sont retenus et restaurés au chargement. */
+  function memoriserContexte() {
+    localStorage.setItem(CLE_CONTEXTE, JSON.stringify({
+      lieu: choix.lieu,
+      nomExpo: document.getElementById('nomExpo').value.trim()
+    }));
+  }
+
+  function restaurerContexte() {
+    var brut = localStorage.getItem(CLE_CONTEXTE);
+    if (!brut) return;
+    try {
+      var ctx = JSON.parse(brut);
+      if (ctx.lieu) {
+        choix.lieu = ctx.lieu;
+        document.getElementById('blocExpo').style.display = (ctx.lieu === 'Expo') ? 'block' : 'none';
+      }
+      if (ctx.nomExpo) document.getElementById('nomExpo').value = ctx.nomExpo;
+    } catch (e) { /* contexte illisible : on repart d'un formulaire vierge */ }
+  }
+
+  /* ── Enregistrement ─────────────────────────────────────────────────────── */
+
+  function valeur(id) { return document.getElementById(id).value.trim(); }
+
+  function enregistrer() {
+    var accord = document.getElementById('accordRecontact').checked;
+    var email = valeur('email');
+
+    // Contrôles côté page : ils évitent un aller-retour réseau et, hors ligne, une
+    // fiche qui partirait en file d'attente pour être refusée trois heures plus tard.
+    // Le script les refait tous — c'est lui qui fait autorité.
+    if (!choix.saisiPar)   { return afficherMessage('err', 'Indiquez qui fait la découverte.'); }
+    if (!choix.lieu)       { return afficherMessage('err', 'Choisissez le lieu.'); }
+    if (choix.lieu === 'Expo' && !valeur('nomExpo')) {
+      return afficherMessage('err', 'Nommez l\'exposition : dans trois mois, personne ne s\'en souviendra.');
+    }
+    if (!choix.thematique) { return afficherMessage('err', 'Choisissez la thématique de la demande.'); }
+    if (choix.thematique === 'Autre' && !valeur('precision')) {
+      return afficherMessage('err', 'Précisez de quoi il s\'agit.');
+    }
+    if (!valeur('nom') && !valeur('prenom') && !valeur('telephone') && !email) {
+      return afficherMessage('err', 'Renseignez au moins un nom ou un moyen de rappel.');
+    }
+    if (accord && !email) {
+      return afficherMessage('err', 'L\'email est obligatoire pour l\'accord de recontact : c\'est là que part la demande de confirmation.');
+    }
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return afficherMessage('err', 'Vérifiez l\'adresse email : ' + email);
+    }
+
+    var fiche = {
+      idFiche: genererIdFiche(),
+      dateContact: valeur('dateContact'),
+      lieu: choix.lieu,
+      nomExpo: valeur('nomExpo'),
+      saisiPar: choix.saisiPar,
+      thematique: choix.thematique,
+      precision: valeur('precision'),
+      nom: valeur('nom'),
+      prenom: valeur('prenom'),
+      telephone: valeur('telephone'),
+      email: email,
+      adresse: valeur('adresse'),
+      codePostal: valeur('codePostal'),
+      ville: valeur('ville'),
+      demande: valeur('demande'),
+      accordRecontact: accord
+    };
+
+    memoriserContexte();
+
+    var bouton = document.getElementById('btnEnregistrer');
+    bouton.disabled = true;
+    bouton.textContent = 'Envoi…';
+
+    var rendreLeBouton = function () {
+      bouton.disabled = false;
+      bouton.textContent = 'Enregistrer la fiche';
+    };
+
+    appelApi('enregistrerFiche', fiche)
+      .then(function (resultat) {
+        rendreLeBouton();
+        if (resultat && resultat.erreur) {
+          afficherMessage('err', resultat.erreur);
+          return;
+        }
+        var suite = resultat && resultat.emailConfirmationEnvoye
+          ? ' Demande de confirmation envoyée à ' + fiche.email + '.'
+          : (fiche.accordRecontact
+              ? ' Attention : la demande de confirmation n\'a PAS pu être envoyée (voir le classeur).'
+              : '');
+        afficherMessage(resultat && resultat.emailConfirmationEnvoye ? 'ok' : (fiche.accordRecontact ? 'warn' : 'ok'),
+          'Fiche enregistrée.' + suite);
+        viderFormulaire();
+      })
+      .catch(function (err) {
+        rendreLeBouton();
+        if (err && err.authRefusee) {
+          afficherMessage('err', err.message);
+          return;
+        }
+        // La fiche est mise de côté dans tous les cas — on ne perd jamais une saisie
+        // faite devant quelqu'un. Seul le message change, parce que le geste à faire
+        // n'est pas le même : attendre le réseau, ou aller régler l'adresse.
+        mettreEnAttente(fiche);
+        viderFormulaire();
+        if (err && err.configManquante) {
+          afficherMessage('err', 'Fiche gardée sur ce téléphone, mais elle ne partira pas : ' +
+            err.message);
+          return;
+        }
+        afficherMessage('warn',
+          'Pas de réseau — fiche gardée sur ce téléphone. Elle partira toute seule ' +
+          'dès le retour de la connexion.' +
+          (fiche.accordRecontact ? ' L\'email de confirmation partira à ce moment-là.' : ''));
+      });
+  }
+
+  // Le lieu, le nom de l'expo et la date restent en place : c'est le même stand et le
+  // même jour pour le visiteur suivant. Tout ce qui est personnel est effacé.
+  function viderFormulaire() {
+    ['nom', 'prenom', 'telephone', 'email', 'adresse', 'codePostal', 'ville', 'demande', 'precision']
+      .forEach(function (id) { document.getElementById(id).value = ''; });
+    document.getElementById('accordRecontact').checked = false;
+    document.getElementById('blocRgpd').classList.remove('on');
+    // Les listes de communes du visiteur précédent n'ont rien à faire devant le suivant.
+    masquerSuggestionsVille();
+    masquerSuggestionsCommune();
+    codePostalRecherche = '';
+    communeRecherche = '';
+    choix.thematique = '';
+    document.getElementById('blocPrecision').style.display = 'none';
+    Array.prototype.forEach.call(document.getElementById('pillsThematique').children,
+      function (b) { b.classList.remove('on'); });
+  }
+
+  /* ── Réglages ───────────────────────────────────────────────────────────── */
+
+  function sauverReglages() {
+    var url = valeur('urlApi');
+    if (url) localStorage.setItem(CLE_URL, url);
+
+    if (!urlApiConfiguree()) {
+      afficherMessage('err', 'Adresse non reconnue. Elle doit ressembler à ' +
+        'https://script.google.com/macros/s/…/exec');
+      return;
+    }
+    afficherMessage('ok', 'Réglages enregistrés sur cet appareil.');
+    // L'appareil vient peut-être d'être réglé : on récupère les listes et on tente
+    // d'envoyer ce qui attendait faute d'adresse valide.
+    chargerListes();
+    viderFileAttente();
+  }
+
+  // Le prénom du saisisseur reste affiché en permanence : c'est ce qui évite qu'une
+  // journée entière parte sous le mauvais nom parce que le téléphone a changé de main.
+  function majSousTitre() {
+    var qui = localStorage.getItem(CLE_SAISISSEUR);
+    document.getElementById('sousTitre').textContent = qui ? 'Saisie : ' + qui : 'Prise de contact';
+  }
+
+  /* ── Code postal ⇄ ville (API publique geo.api.gouv.fr) ─────────────────
+     Repris de la page de vente du registre, dans les deux sens. Aucune clé, aucun
+     compte : l'API est publique. Hors ligne elle est injoignable — les .catch
+     laissent alors la saisie manuelle faire son travail, sans rien bloquer.
+     Le service worker n'intercepte que le même domaine : ces appels lui échappent
+     et ne risquent pas d'être servis depuis un cache périmé. */
+
+  var codePostalRecherche = '';
+
+  function masquerSuggestionsVille() {
+    var box = document.getElementById('villeSuggestions');
+    box.classList.remove('visible');
+    box.innerHTML = '';
+  }
+
+  function choisirVille(nom) {
+    document.getElementById('ville').value = nom;
+    masquerSuggestionsVille();
+  }
+
+  // Code postal → ville. Un seul résultat : rempli directement, sans jamais écraser
+  // une ville déjà tapée à la main. Plusieurs communes partagent le code : on liste.
+  function chercherVillesParCodePostal() {
+    var cp = document.getElementById('codePostal').value.trim();
+    if (!/^[0-9]{5}$/.test(cp)) {
+      masquerSuggestionsVille();
+      codePostalRecherche = '';
+      return;
+    }
+    if (cp === codePostalRecherche) return;
+    codePostalRecherche = cp;
+    fetch('https://geo.api.gouv.fr/communes?codePostal=' + cp + '&fields=nom&format=json')
+      .then(function (r) { return r.json(); })
+      .then(function (communes) {
+        if (cp !== codePostalRecherche || !Array.isArray(communes) || communes.length === 0) {
+          masquerSuggestionsVille();
+          return;
+        }
+        if (communes.length === 1) {
+          var champVille = document.getElementById('ville');
+          if (!champVille.value.trim()) champVille.value = communes[0].nom;
+          masquerSuggestionsVille();
+          return;
+        }
+        var box = document.getElementById('villeSuggestions');
+        box.innerHTML = communes.map(function (c) {
+          return '<button type="button" onclick="choisirVille(\'' +
+            c.nom.replace(/'/g, "\\'") + '\')">' + echapper(c.nom) + '</button>';
+        }).join('');
+        box.classList.add('visible');
+      })
+      .catch(function () { /* API injoignable : saisie manuelle, rien de bloquant */ });
+  }
+
+  var communeRecherche = '';
+  var communeRechercheTimer = null;
+
+  function masquerSuggestionsCommune() {
+    var box = document.getElementById('communeSuggestions');
+    box.classList.remove('visible');
+    box.innerHTML = '';
+  }
+
+  function choisirCommune(nom, codePostal) {
+    document.getElementById('ville').value = nom;
+    if (codePostal) {
+      var champCp = document.getElementById('codePostal');
+      if (!champCp.value.trim()) champCp.value = codePostal;
+    }
+    masquerSuggestionsCommune();
+  }
+
+  // Ville → code postal. Recherche floue, débattue de 300 ms parce que l'utilisateur
+  // tape lettre par lettre. Le code postal n'est rempli que si la commune n'en a
+  // qu'un : Paris, Lyon et Marseille en ont plusieurs, on ne devine pas à leur place.
+  function chercherCommunesParNom() {
+    var nom = document.getElementById('ville').value.trim();
+    clearTimeout(communeRechercheTimer);
+    if (nom.length < 2) {
+      masquerSuggestionsCommune();
+      communeRecherche = '';
+      return;
+    }
+    communeRechercheTimer = setTimeout(function () {
+      if (nom === communeRecherche) return;
+      communeRecherche = nom;
+      fetch('https://geo.api.gouv.fr/communes?nom=' + encodeURIComponent(nom) +
+            '&fields=nom,codesPostaux&boost=population&limit=8')
+        .then(function (r) { return r.json(); })
+        .then(function (communes) {
+          // La saisie a continué pendant l'appel : cette réponse est périmée.
+          if (document.getElementById('ville').value.trim() !== nom) return;
+          if (!Array.isArray(communes) || communes.length === 0) {
+            masquerSuggestionsCommune();
+            return;
+          }
+          var box = document.getElementById('communeSuggestions');
+          box.innerHTML = communes.map(function (c) {
+            var cps = c.codesPostaux || [];
+            var cpUnique = cps.length === 1 ? cps[0] : '';
+            var nomEchappe = c.nom.replace(/'/g, "\\'");
+            var suffixe = cps.length
+              ? ' <span style="color:var(--text-3);font-size:12px">(' + cps.join(', ') + ')</span>'
+              : '';
+            return '<button type="button" onclick="choisirCommune(\'' + nomEchappe + '\', \'' +
+              cpUnique + '\')">' + echapper(c.nom) + suffixe + '</button>';
+          }).join('');
+          box.classList.add('visible');
+        })
+        .catch(function () { /* API injoignable : saisie manuelle, rien de bloquant */ });
+    }, 300);
+  }
+
+  document.getElementById('codePostal').addEventListener('input', chercherVillesParCodePostal);
+  document.getElementById('codePostal').addEventListener('blur', function () {
+    setTimeout(masquerSuggestionsVille, 150);  // laisse le tap sur une suggestion aboutir
+  });
+  document.getElementById('ville').addEventListener('input', chercherCommunesParNom);
+  document.getElementById('ville').addEventListener('blur', function () {
+    setTimeout(masquerSuggestionsCommune, 150);
+  });
+
+  /* ── État du réseau ─────────────────────────────────────────────────────── */
+
+  function majEtatReseau() {
+    var badge = document.getElementById('etatReseau');
+    if (navigator.onLine) {
+      badge.className = 'etat-reseau en-ligne';
+      badge.textContent = 'en ligne';
+    } else {
+      badge.className = 'etat-reseau hors-ligne';
+      badge.textContent = 'hors ligne';
+    }
+  }
+
+  // navigator.onLine ment volontiers (wifi capté sans internet derrière) : le retour
+  // en ligne déclenche une tentative d'envoi, mais l'échec est déjà prévu — la file
+  // reste intacte et sera retentée.
+  window.addEventListener('online', function () {
+    majEtatReseau();
+    viderFileAttente();
+    chargerListes();
+  });
+  window.addEventListener('offline', majEtatReseau);
+
+  /* ── Démarrage ──────────────────────────────────────────────────────────── */
+
+  function chargerListes() {
+    if (!navigator.onLine) return;
+    appelApi('getListes', null)
+      .then(function (recues) {
+        if (!recues || recues.erreur) return;
+        localStorage.setItem(CLE_LISTES, JSON.stringify(recues));
+        appliquerListes(recues);
+      })
+      .catch(function () { /* hors ligne ou script injoignable : le cache fait le travail */ });
+  }
+
+  function demarrer() {
+    // Date du jour préremplie : en expo, c'est presque toujours la bonne.
+    var maintenant = new Date();
+    var jour = new Date(maintenant.getTime() - maintenant.getTimezoneOffset() * 60000);
+    document.getElementById('dateContact').value = jour.toISOString().slice(0, 10);
+
+    // Qui saisit est restauré AVANT les pastilles, comme le lieu : construirePastilles
+    // lit `choix` pour marquer d'emblée la bonne personne.
+    choix.saisiPar = localStorage.getItem(CLE_SAISISSEUR) || '';
+    document.getElementById('urlApi').value = urlApi();
+    majSousTitre();
+
+    var enCache = null;
+    try { enCache = JSON.parse(localStorage.getItem(CLE_LISTES) || 'null'); } catch (e) { enCache = null; }
+    // Le contexte AVANT les pastilles : il fixe choix.lieu, que construirePastilles
+    // lit pour marquer d'emblée le bon lieu comme sélectionné.
+    restaurerContexte();
+    appliquerListes(enCache);
+
+    document.getElementById('accordRecontact').addEventListener('change', function () {
+      document.getElementById('blocRgpd').classList.toggle('on', this.checked);
+    });
+
+    document.getElementById('nomExpo').addEventListener('change', memoriserContexte);
+
+    majEtatReseau();
+    afficherFileAttente();
+
+    // Dit tout de suite qu'il manque un réglage, plutôt qu'à la première fiche perdue
+    // devant un visiteur.
+    if (!urlApiConfiguree()) {
+      afficherMessage('err',
+        'Appareil pas encore réglé : ouvrez « Réglages de l\'appareil » en bas de page ' +
+        'et collez l\'adresse de l\'application (URL en /exec).');
+      document.querySelector('details.reglages').open = true;
+      return;
+    }
+
+    chargerListes();
+    viderFileAttente();
+  }
+
+  /* ── Service worker ─────────────────────────────────────────────────────
+     C'est lui qui rend la page ouvrable SANS réseau. Sans service worker, une
+     page hébergée en ligne ne s'affiche tout simplement pas hors connexion :
+     la file d'attente ne servirait qu'aux coupures survenant onglet déjà ouvert. */
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function (e) {
+        console.warn('Service worker non enregistré :', e);
+      });
+    });
+  }
+
+  demarrer();
+</script>
+
+</body>
+</html>
