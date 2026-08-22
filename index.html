@@ -206,6 +206,24 @@
       color: #fff; font-size: 14px; line-height: 1; cursor: pointer;
       display: flex; align-items: center; justify-content: center; padding: 0;
     }
+    details.aide-heic {
+      margin-top: 0.65rem;
+      border: 1px solid var(--borderdiv);
+      border-radius: 8px;
+      background: rgba(37,33,24,0.6);
+    }
+    details.aide-heic summary {
+      padding: 0.55rem 0.75rem;
+      font-size: 12px; color: var(--text-3);
+      cursor: pointer; list-style: none;
+    }
+    details.aide-heic summary::-webkit-details-marker { display: none; }
+    details.aide-heic[open] summary { color: var(--text-2); border-bottom: 1px solid var(--borderdiv); }
+    .aide-heic-corps { padding: 0.7rem 0.75rem; }
+    .aide-heic-corps p { font-size: 12.5px; color: var(--text-3); line-height: 1.6; margin-bottom: 0.5rem; }
+    .aide-heic-corps p:last-child { margin-bottom: 0; }
+    .aide-heic-corps strong { color: var(--text-2); }
+
     .vignette-poids {
       position: absolute; bottom: 0; left: 0; right: 0;
       background: rgba(0,0,0,0.66); color: var(--text-2);
@@ -415,6 +433,22 @@
       <strong>et</strong> au compte rendu de l'atelier : en cas de litige, chacun a la
       même preuve datée.
     </div>
+
+    <!-- Le HEIC ne se règle pas dans l'application : il se règle dans l'appareil photo.
+         L'aide vit donc ici, là où le problème se manifeste. -->
+    <details class="aide-heic">
+      <summary>Une photo est refusée « format HEIC » ?</summary>
+      <div class="aide-heic-corps">
+        <p>Le HEIC est le format d'origine de beaucoup de téléphones. Les navigateurs
+        Android ne savent pas l'ouvrir. Le réglage se fait une fois pour toutes :</p>
+        <p><strong>Android (Samsung)</strong> — Appareil photo → ⚙ Paramètres →
+        <em>Formats avancés</em> → désactiver <em>Photos HEIF</em>.</p>
+        <p><strong>iPhone</strong> — Réglages → Appareil photo → Formats →
+        <em>Le plus compatible</em>.</p>
+        <p>En dépannage immédiat : le bouton <em>Prendre une photo</em> ci-dessus donne
+        le plus souvent du JPEG, même quand la galerie est en HEIC.</p>
+      </div>
+    </details>
   </div>
 
   <!-- ── Coordonnées ── -->
@@ -999,37 +1033,72 @@
 
   function placesPhotosRestantes() { return MAX_PHOTOS - photos.length; }
 
-  function redimensionnerImage(fichier) {
+  // Le HEIC est le format par défaut des iPhone et de beaucoup d'Android récents.
+  // Safari le décode, Chrome sur Android non : la même photo passe sur un téléphone
+  // et échoue sur l'autre. On le reconnaît pour pouvoir le DIRE, au lieu d'afficher
+  // un « format non reconnu » qui ne dit pas quoi faire.
+  function estHeic(fichier) {
+    var nom = String(fichier.name || '').toLowerCase();
+    var type = String(fichier.type || '').toLowerCase();
+    return type.indexOf('heic') !== -1 || type.indexOf('heif') !== -1 ||
+           /\.(heic|heif)$/.test(nom);
+  }
+
+  // Deux voies de décodage, parce qu'elles n'ont pas les mêmes capacités selon les
+  // appareils : createImageBitmap passe par le décodeur du navigateur et avale parfois
+  // ce que <img> refuse. On tente la première, on retombe sur la seconde.
+  function chargerImage(fichier) {
+    if (window.createImageBitmap) {
+      return createImageBitmap(fichier).catch(function () { return chargerParBalise(fichier); });
+    }
+    return chargerParBalise(fichier);
+  }
+
+  function chargerParBalise(fichier) {
     return new Promise(function (resoudre, rejeter) {
       var lecteur = new FileReader();
       lecteur.onerror = function () { rejeter(new Error('Image illisible.')); };
       lecteur.onload = function () {
         var image = new Image();
-        image.onerror = function () { rejeter(new Error('Format d\'image non reconnu.')); };
-        image.onload = function () {
-          var ratio = Math.min(1, PHOTO_COTE_MAX / Math.max(image.width, image.height));
-          var largeur = Math.round(image.width * ratio);
-          var hauteur = Math.round(image.height * ratio);
-
-          var canvas = document.createElement('canvas');
-          canvas.width = largeur;
-          canvas.height = hauteur;
-          var ctx = canvas.getContext('2d');
-          ctx.drawImage(image, 0, 0, largeur, hauteur);
-
-          var donneesUrl = canvas.toDataURL('image/jpeg', PHOTO_QUALITE);
-          var base64 = donneesUrl.split(',')[1];
-          resoudre({
-            apercu: donneesUrl,
-            donnees: base64,
-            type: 'image/jpeg',
-            // Longueur du base64 → poids réel approché (4 caractères pour 3 octets).
-            octets: Math.round(base64.length * 0.75)
-          });
+        image.onerror = function () {
+          rejeter(new Error(estHeic(fichier)
+            ? 'format HEIC — ce téléphone ne sait pas l\'ouvrir dans le navigateur. ' +
+              'Dépliez « Une photo est refusée » sous les boutons : le réglage de ' +
+              'l\'appareil photo s\'y trouve. En attendant, « Prendre une photo » fonctionne.'
+            : 'format d\'image non reconnu.'));
         };
+        image.onload = function () { resoudre(image); };
         image.src = lecteur.result;
       };
       lecteur.readAsDataURL(fichier);
+    });
+  }
+
+  function redimensionnerImage(fichier) {
+    return chargerImage(fichier).then(function (image) {
+      var largeurSource = image.width;
+      var hauteurSource = image.height;
+      var ratio = Math.min(1, PHOTO_COTE_MAX / Math.max(largeurSource, hauteurSource));
+      var largeur = Math.round(largeurSource * ratio);
+      var hauteur = Math.round(hauteurSource * ratio);
+
+      var canvas = document.createElement('canvas');
+      canvas.width = largeur;
+      canvas.height = hauteur;
+      canvas.getContext('2d').drawImage(image, 0, 0, largeur, hauteur);
+      if (image.close) image.close();   // libère l'ImageBitmap, qui n'est pas ramassé seul
+
+      // Quelle que soit la source — HEIC décodé par Safari, PNG, WebP — il ressort du
+      // JPEG : tous les clients mail savent l'afficher.
+      var donneesUrl = canvas.toDataURL('image/jpeg', PHOTO_QUALITE);
+      var base64 = donneesUrl.split(',')[1];
+      return {
+        apercu: donneesUrl,
+        donnees: base64,
+        type: 'image/jpeg',
+        // Longueur du base64 → poids réel approché (4 caractères pour 3 octets).
+        octets: Math.round(base64.length * 0.75)
+      };
     });
   }
 

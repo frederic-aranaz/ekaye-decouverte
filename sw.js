@@ -11,7 +11,7 @@
  * l'ancienne indéfiniment : c'est le seul piège de ce fichier.
  */
 
-var VERSION = 'v2';   // v2 : ajout des photos (22/08/2026)
+var VERSION = 'v3';   // v3 : message et aide HEIC (22/08/2026)
 var CACHE = 'ekaye-decouverte-' + VERSION;
 
 var FICHIERS = [
