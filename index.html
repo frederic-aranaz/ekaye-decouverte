@@ -230,6 +230,64 @@
       font-size: 9.5px; text-align: center; padding: 2px 0;
     }
 
+    /* ── Signature ── */
+    /* Repris du bon de dépôt du registre : fond blanc, trait sombre, on signe comme
+       sur du papier. Le canvas lui-même reste TRANSPARENT (voir preparerCanvas). */
+    .modale {
+      position: fixed; inset: 0; background: rgba(10,8,6,0.85); z-index: 50;
+      display: flex; align-items: center; justify-content: center; padding: 14px;
+      overflow-y: auto;
+    }
+    .modale[hidden] { display: none; }
+    .modale-carte {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 18px; width: 100%; max-width: 520px; box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+    }
+    .modale-carte h2 { font-size: 15px; color: #e8d8b0; margin-bottom: 4px; }
+    .modale-sous { font-size: 12px; color: var(--text-3); line-height: 1.55; margin-bottom: 14px; }
+    .modale-constat {
+      background: var(--bg-card2); border: 1px solid var(--borderdiv); border-radius: 8px;
+      padding: 0.7rem 0.8rem; margin-bottom: 0.9rem;
+      font-size: 12.5px; color: var(--text-2); line-height: 1.6;
+    }
+    .modale-constat strong { color: var(--text); }
+    .sig-zone { position: relative; background: #fff; border-radius: 8px; margin-bottom: 6px; }
+    .sig-zone canvas {
+      display: block; width: 100%; height: 170px; border-radius: 8px;
+      touch-action: none; cursor: crosshair;
+    }
+    .sig-indice {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: #b9b2a6; font-size: 13px; pointer-events: none;
+    }
+    .sig-zone.tracee .sig-indice { display: none; }
+    .modale-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.9rem; }
+    .modale-actions button { flex: 1 1 auto; min-height: 44px; }
+    .btn-valider {
+      background: linear-gradient(180deg, var(--ek) 0%, #b0741f 100%);
+      border: none; border-radius: 8px; color: #1a1409;
+      font-family: var(--font); font-size: 15px; font-weight: 700; cursor: pointer;
+    }
+    .sig-etat { font-size: 12px; line-height: 1.6; margin-top: 0.7rem; color: var(--err); }
+
+    /* Vignette de la signature apposée, dans le formulaire */
+    .sig-apposee {
+      display: flex; align-items: center; gap: 0.7rem;
+      background: rgba(127,176,105,0.1); border: 1px solid rgba(127,176,105,0.35);
+      border-radius: 9px; padding: 0.6rem 0.7rem; margin-top: 0.6rem;
+    }
+    .sig-apposee img {
+      height: 46px; width: auto; max-width: 150px; background: #fff;
+      border-radius: 5px; padding: 2px;
+    }
+    .sig-apposee-txt { flex: 1; font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
+    .sig-apposee-txt strong { color: var(--ok); }
+    .sig-apposee button {
+      background: none; border: 1px solid rgba(207,107,90,0.4); color: var(--err);
+      border-radius: 6px; font-size: 11px; padding: 5px 9px; cursor: pointer;
+      font-family: var(--font); flex-shrink: 0;
+    }
+
     /* ── Case à cocher RGPD ── */
     .rgpd {
       background: var(--bg-card2);
@@ -436,6 +494,16 @@
 
     <!-- Le HEIC ne se règle pas dans l'application : il se règle dans l'appareil photo.
          L'aide vit donc ici, là où le problème se manifeste. -->
+    <!-- ── Signature du constat ──
+         Placée sous les photos : on signe ce qu'on vient de constater, pas l'inverse. -->
+    <div class="fb" style="margin-top:1rem">
+      <div class="fl">Signature du client <span class="opt">— facultative, mais elle vaut la photo</span></div>
+      <button type="button" class="photo-btn" style="flex:1 1 100%" onclick="ouvrirSignature()">
+        &#9997; Faire signer sur cet écran
+      </button>
+      <div id="sigApposee"></div>
+    </div>
+
     <details class="aide-heic">
       <summary>Une photo est refusée « format HEIC » ?</summary>
       <div class="aide-heic-corps">
@@ -525,6 +593,34 @@
   <button type="button" class="btn-principal" id="btnEnregistrer" onclick="enregistrer()">
     Enregistrer la fiche
   </button>
+
+  <!-- ── Pavé de signature ── -->
+  <div class="modale" id="modaleSignature" hidden>
+    <div class="modale-carte">
+      <h2>Faire signer le constat</h2>
+      <p class="modale-sous">La personne signe ci-dessous, devant vous. Le tracé est joint
+        au récapitulatif qui lui est envoyé, et au compte rendu de l'atelier.</p>
+
+      <div class="modale-constat" id="sigConstat"></div>
+
+      <div class="fb">
+        <div class="fl">Nom du signataire <span class="oblig">*</span></div>
+        <input type="text" class="fv" id="sigNom" autocapitalize="words" autocomplete="off">
+      </div>
+
+      <div class="sig-zone" id="sigZone">
+        <canvas id="sigCanvas"></canvas>
+        <span class="sig-indice">Signez ici avec le doigt</span>
+      </div>
+
+      <div class="modale-actions">
+        <button type="button" class="btn-second" onclick="effacerSignature()">Effacer</button>
+        <button type="button" class="btn-second" onclick="fermerSignature()">Annuler</button>
+        <button type="button" class="btn-valider" onclick="validerSignature()">Valider</button>
+      </div>
+      <div class="sig-etat" id="sigEtat"></div>
+    </div>
+  </div>
 
   <!-- ── Réglages ── -->
   <details class="reglages">
@@ -896,7 +992,8 @@
       ville: valeur('ville'),
       demande: valeur('demande'),
       accordRecontact: accord,
-      photos: photosPourEnvoi()
+      photos: photosPourEnvoi(),
+      signature: signaturePourEnvoi()
     };
 
     memoriserContexte();
@@ -934,6 +1031,15 @@
           } else {
             suite += ' ATTENTION : ' + deposees + ' photo(s) enregistrée(s) sur ' +
               envoyees + ' envoyée(s).';
+            alerte = true;
+          }
+        }
+
+        if (fiche.signature) {
+          if (resultat && resultat.signatureEnregistree) {
+            suite += ' Constat signé par ' + fiche.signature.signePar + '.';
+          } else {
+            suite += ' ATTENTION : la signature n\'a PAS été enregistrée.';
             alerte = true;
           }
         }
@@ -986,6 +1092,10 @@
     // suivant serait la pire erreur possible sur un constat d'état.
     photos = [];
     afficherVignettes();
+    // Une signature appartient à la personne qui l'a tracée : la laisser en place pour
+    // le visiteur suivant serait un faux.
+    signature = null;
+    afficherSignature();
   }
 
   /* ── Réglages ───────────────────────────────────────────────────────────── */
@@ -1167,6 +1277,152 @@
     ajouterPhotos(this.files);
     this.value = '';
   });
+
+  /* ── Signature du constat ───────────────────────────────────────────────
+     Repris du bon de dépôt du registre. Signature SIMPLE au sens eIDAS : la personne
+     signe au doigt, sur place, devant celui qui saisit. Aucune vérification d'identité
+     — ce qui vaut, c'est le faisceau (qui, quand, sur quoi, avec quelles photos) et
+     l'empreinte calculée par le script. */
+  var signature = null;      // { donnees(base64 PNG), signePar }
+  var sigTrace = false;
+
+  // Le canvas est dimensionné en pixels RÉELS de l'écran : sans cela le tracé est flou
+  // sur un téléphone, et c'est justement là qu'on signe.
+  function preparerCanvas() {
+    var canvas = document.getElementById('sigCanvas');
+    var ratio = window.devicePixelRatio || 1;
+    var largeur = canvas.clientWidth;
+    var hauteur = canvas.clientHeight;
+    canvas.width = Math.round(largeur * ratio);
+    canvas.height = Math.round(hauteur * ratio);
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    // Aucun fond peint : l'image sort TRANSPARENTE. Le blanc que voit la personne qui
+    // signe vient du CSS de la zone, pas du canvas — un fond blanc plein deviendrait un
+    // rectangle opaque au milieu d'un email sombre.
+    ctx.clearRect(0, 0, largeur, hauteur);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#12100e';
+    return ctx;
+  }
+
+  function installerTrace() {
+    var canvas = document.getElementById('sigCanvas');
+    var zone = document.getElementById('sigZone');
+    var ctx = null;
+    var dessine = false;
+
+    function point(ev) {
+      var r = canvas.getBoundingClientRect();
+      return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+    }
+
+    canvas.addEventListener('pointerdown', function (ev) {
+      ctx = canvas.getContext('2d');
+      dessine = true;
+      sigTrace = true;
+      zone.classList.add('tracee');
+      // Le suivi hors du cadre est un confort, pas une condition : si le navigateur
+      // refuse la capture, le tracé doit continuer quand même.
+      try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
+      var p = point(ev);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      // Un point isolé doit laisser une marque : sans ce trait de longueur nulle, un
+      // simple tap ne dessine rien.
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      ev.preventDefault();
+    });
+
+    canvas.addEventListener('pointermove', function (ev) {
+      if (!dessine) return;
+      var p = point(ev);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      ev.preventDefault();
+    });
+
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (nom) {
+      canvas.addEventListener(nom, function () { dessine = false; });
+    });
+  }
+
+  function effacerSignature() {
+    preparerCanvas();
+    sigTrace = false;
+    document.getElementById('sigZone').classList.remove('tracee');
+  }
+
+  // Rappelle SUR le pavé ce qui est signé : on ne fait pas signer à l'aveugle.
+  function resumeConstat() {
+    var qui = (valeur('prenom') + ' ' + valeur('nom')).trim();
+    var lieu = choix.lieu === 'Expo' ? 'Expo — ' + valeur('nomExpo') : (choix.lieu || '—');
+    var quoi = choix.thematique === 'Autre' ? valeur('precision') : (choix.thematique || '—');
+    var morceaux = [
+      '<strong>' + echapper(quoi) + '</strong> — ' + echapper(lieu),
+      qui ? 'Pour ' + echapper(qui) : null,
+      valeur('demande') ? echapper(valeur('demande')) : null,
+      photos.length ? photos.length + ' photo(s) jointe(s) au constat' : 'Aucune photo'
+    ].filter(Boolean);
+    return morceaux.join('<br>');
+  }
+
+  function ouvrirSignature() {
+    if (!choix.thematique) {
+      return afficherMessage('err', 'Choisissez d\'abord la thématique : elle figure sur le constat signé.');
+    }
+    document.getElementById('sigConstat').innerHTML = resumeConstat();
+    document.getElementById('sigNom').value = signature
+      ? signature.signePar
+      : (valeur('prenom') + ' ' + valeur('nom')).trim();
+    document.getElementById('sigEtat').textContent = '';
+    document.getElementById('modaleSignature').hidden = false;
+    // Le canvas ne peut être dimensionné qu'une fois visible : hors écran, sa largeur
+    // vaut zéro et le tracé se retrouverait écrasé.
+    effacerSignature();
+  }
+
+  function fermerSignature() {
+    document.getElementById('modaleSignature').hidden = true;
+  }
+
+  function validerSignature() {
+    var nom = document.getElementById('sigNom').value.trim();
+    var etat = document.getElementById('sigEtat');
+    if (!nom) { etat.textContent = 'Indiquez le nom de la personne qui signe.'; return; }
+    if (!sigTrace) { etat.textContent = 'La zone de signature est vide.'; return; }
+
+    var donneesUrl = document.getElementById('sigCanvas').toDataURL('image/png');
+    signature = { donnees: donneesUrl.split(',')[1], signePar: nom, apercu: donneesUrl };
+    fermerSignature();
+    afficherSignature();
+  }
+
+  function retirerSignature() {
+    if (!window.confirm('Retirer la signature de ce constat ?')) return;
+    signature = null;
+    afficherSignature();
+  }
+
+  function afficherSignature() {
+    var boite = document.getElementById('sigApposee');
+    if (!signature) { boite.innerHTML = ''; return; }
+    boite.innerHTML = '<div class="sig-apposee">' +
+      '<img src="' + signature.apercu + '" alt="Signature">' +
+      '<div class="sig-apposee-txt"><strong>Signé</strong><br>' + echapper(signature.signePar) + '</div>' +
+      '<button type="button" onclick="retirerSignature()">Retirer</button>' +
+      '</div>';
+  }
+
+  // Ce qui part au serveur : sans l'aperçu, qui ne sert qu'à l'écran.
+  function signaturePourEnvoi() {
+    return signature ? { donnees: signature.donnees, signePar: signature.signePar } : null;
+  }
+
+  installerTrace();
 
   /* ── Code postal ⇄ ville (API publique geo.api.gouv.fr) ─────────────────
      Repris de la page de vente du registre, dans les deux sens. Aucune clé, aucun
