@@ -175,6 +175,43 @@
     .ville-suggestions button:active, .ville-suggestions button:hover { background: rgba(201,136,42,0.12); }
     .champ-suggest { position: relative; }
 
+    /* ── Photos ── */
+    .photo-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .photo-btn {
+      flex: 1 1 45%;
+      min-height: 48px;
+      background: var(--bg-card2);
+      border: 1px dashed rgba(201,136,42,0.45);
+      border-radius: 9px;
+      color: var(--text-2);
+      font-family: var(--font);
+      font-size: 14px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .photo-btn:active { background: rgba(201,136,42,0.12); }
+    .photo-btn:disabled { opacity: 0.4; cursor: default; }
+    .vignettes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+    .vignette {
+      position: relative; width: 84px; height: 84px;
+      border-radius: 8px; overflow: hidden;
+      border: 1px solid var(--border);
+      background: #000;
+    }
+    .vignette img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .vignette button {
+      position: absolute; top: 2px; right: 2px;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: rgba(0,0,0,0.72); border: 1px solid rgba(255,255,255,0.35);
+      color: #fff; font-size: 14px; line-height: 1; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; padding: 0;
+    }
+    .vignette-poids {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(0,0,0,0.66); color: var(--text-2);
+      font-size: 9.5px; text-align: center; padding: 2px 0;
+    }
+
     /* ── Case à cocher RGPD ── */
     .rgpd {
       background: var(--bg-card2);
@@ -349,6 +386,34 @@
     <div class="fb">
       <div class="fl">Détail <span class="opt">— facultatif</span></div>
       <textarea id="demande" placeholder="Ce qu'il ou elle recherche, dimensions, délai, budget évoqué…"></textarea>
+    </div>
+  </div>
+
+  <!-- ── Photos ───────────────────────────────────────────────────────────
+       Deux boutons plutôt qu'un seul champ : sur un stand, « prendre une photo »
+       doit ouvrir l'appareil du premier coup, sans passer par un sélecteur.
+       `capture` sur le premier, rien sur le second — qui laisse alors le système
+       proposer la galerie, les fichiers, et Drive. -->
+  <div class="section">
+    <div class="sec-title">&#128247; Photos <span class="badge-opt" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-3);font-size:11px">— état de la pièce</span></div>
+
+    <div class="photo-actions">
+      <button type="button" class="photo-btn" id="btnAppareil" onclick="ouvrirAppareil()">
+        &#128247; Prendre une photo
+      </button>
+      <button type="button" class="photo-btn" id="btnGalerie" onclick="ouvrirGalerie()">
+        &#128193; Choisir une image
+      </button>
+    </div>
+
+    <input type="file" id="fichierAppareil" accept="image/*" capture="environment" style="display:none">
+    <input type="file" id="fichierGalerie" accept="image/*" multiple style="display:none">
+
+    <div class="vignettes" id="vignettes"></div>
+    <div class="aide" id="aidePhotos">
+      Jusqu'à 4 photos. Elles sont jointes au récapitulatif envoyé au client
+      <strong>et</strong> au compte rendu de l'atelier : en cas de litige, chacun a la
+      même preuve datée.
     </div>
   </div>
 
@@ -545,7 +610,22 @@
     try { return JSON.parse(localStorage.getItem(CLE_FILE) || '[]'); }
     catch (e) { return []; }
   }
-  function sauverFile(file) { localStorage.setItem(CLE_FILE, JSON.stringify(file)); }
+  // Le localStorage plafonne autour de 5 Mo. Une fiche sans photo pèse quelques
+  // centaines d'octets, une fiche avec quatre photos approche le mégaoctet : la file
+  // peut donc réellement saturer. Le dire franchement vaut infiniment mieux que de
+  // laisser une exception silencieuse faire disparaître une fiche prise devant un client.
+  function sauverFile(file) {
+    try {
+      localStorage.setItem(CLE_FILE, JSON.stringify(file));
+      return true;
+    } catch (e) {
+      afficherMessage('err',
+        'La mémoire de ce téléphone est pleine : cette fiche n\'a PAS pu être mise de côté. ' +
+        'Retrouvez du réseau pour envoyer les fiches en attente, ou retirez des photos, ' +
+        'puis recommencez.');
+      return false;
+    }
+  }
   function retirerDeLaFile(idFiche) {
     sauverFile(fileAttente().filter(function (f) { return f.idFiche !== idFiche; }));
   }
@@ -555,12 +635,15 @@
     return 'f-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
   }
 
+  // Renvoie false si le téléphone n'a pas pu garder la fiche : l'appelant doit alors
+  // laisser le formulaire rempli plutôt que de le vider sur une fiche perdue.
   function mettreEnAttente(fiche) {
     var file = fileAttente();
     fiche.horodatage = Date.now();
     file.push(fiche);
-    sauverFile(file);
+    var garde = sauverFile(file);
     afficherFileAttente();
+    return garde;
   }
 
   function supprimerEnAttente(idFiche) {
@@ -778,7 +861,8 @@
       codePostal: valeur('codePostal'),
       ville: valeur('ville'),
       demande: valeur('demande'),
-      accordRecontact: accord
+      accordRecontact: accord,
+      photos: photosPourEnvoi()
     };
 
     memoriserContexte();
@@ -804,8 +888,25 @@
           : (fiche.accordRecontact
               ? ' Attention : la demande de confirmation n\'a PAS pu être envoyée (voir le classeur).'
               : '');
-        afficherMessage(resultat && resultat.emailConfirmationEnvoye ? 'ok' : (fiche.accordRecontact ? 'warn' : 'ok'),
-          'Fiche enregistrée.' + suite);
+
+        // Le sort des photos se dit explicitement : sur un constat d'état, croire à tort
+        // qu'une photo est partie est exactement ce qu'on cherche à éviter.
+        var envoyees = fiche.photos.length;
+        var deposees = resultat ? (resultat.photosDeposees || 0) : 0;
+        var alerte = false;
+        if (envoyees) {
+          if (deposees === envoyees) {
+            suite += ' ' + deposees + ' photo(s) jointe(s) aux emails.';
+          } else {
+            suite += ' ATTENTION : ' + deposees + ' photo(s) enregistrée(s) sur ' +
+              envoyees + ' envoyée(s).';
+            alerte = true;
+          }
+        }
+
+        var typeMessage = (alerte || (fiche.accordRecontact && !(resultat && resultat.emailConfirmationEnvoye)))
+          ? 'warn' : 'ok';
+        afficherMessage(typeMessage, 'Fiche enregistrée.' + suite);
         viderFormulaire();
       })
       .catch(function (err) {
@@ -817,7 +918,7 @@
         // La fiche est mise de côté dans tous les cas — on ne perd jamais une saisie
         // faite devant quelqu'un. Seul le message change, parce que le geste à faire
         // n'est pas le même : attendre le réseau, ou aller régler l'adresse.
-        mettreEnAttente(fiche);
+        if (!mettreEnAttente(fiche)) return;   // mémoire pleine : on garde tout à l'écran
         viderFormulaire();
         if (err && err.configManquante) {
           afficherMessage('err', 'Fiche gardée sur ce téléphone, mais elle ne partira pas : ' +
@@ -847,6 +948,10 @@
     document.getElementById('blocPrecision').style.display = 'none';
     Array.prototype.forEach.call(document.getElementById('pillsThematique').children,
       function (b) { b.classList.remove('on'); });
+    // Les photos partent avec la fiche : garder celles du visiteur précédent devant le
+    // suivant serait la pire erreur possible sur un constat d'état.
+    photos = [];
+    afficherVignettes();
   }
 
   /* ── Réglages ───────────────────────────────────────────────────────────── */
@@ -873,6 +978,126 @@
     var qui = localStorage.getItem(CLE_SAISISSEUR);
     document.getElementById('sousTitre').textContent = qui ? 'Saisie : ' + qui : 'Prise de contact';
   }
+
+  /* ── Photos ─────────────────────────────────────────────────────────────
+     Une photo de téléphone pèse 3 à 6 Mo. Telle quelle, elle est increvable en 4G
+     de salon, et surtout elle ferait exploser la file d'attente hors ligne, qui vit
+     dans un localStorage plafonné à quelques Mo. Chaque image est donc redessinée
+     dans un canvas à 1400 px de côté maximum, en JPEG qualité 0,72 : environ 250 Ko,
+     largement assez pour constater l'état d'une pièce.
+
+     Le format d'origine (HEIC de l'iPhone, PNG…) disparaît au passage : le canvas
+     ressort toujours du JPEG, que tous les clients mail savent afficher. */
+  var MAX_PHOTOS = 4;
+  var PHOTO_COTE_MAX = 1400;
+  var PHOTO_QUALITE = 0.72;
+
+  var photos = [];   // [{ apercu, donnees(base64 nu), type, octets }]
+
+  function ouvrirAppareil() { document.getElementById('fichierAppareil').click(); }
+  function ouvrirGalerie() { document.getElementById('fichierGalerie').click(); }
+
+  function placesPhotosRestantes() { return MAX_PHOTOS - photos.length; }
+
+  function redimensionnerImage(fichier) {
+    return new Promise(function (resoudre, rejeter) {
+      var lecteur = new FileReader();
+      lecteur.onerror = function () { rejeter(new Error('Image illisible.')); };
+      lecteur.onload = function () {
+        var image = new Image();
+        image.onerror = function () { rejeter(new Error('Format d\'image non reconnu.')); };
+        image.onload = function () {
+          var ratio = Math.min(1, PHOTO_COTE_MAX / Math.max(image.width, image.height));
+          var largeur = Math.round(image.width * ratio);
+          var hauteur = Math.round(image.height * ratio);
+
+          var canvas = document.createElement('canvas');
+          canvas.width = largeur;
+          canvas.height = hauteur;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(image, 0, 0, largeur, hauteur);
+
+          var donneesUrl = canvas.toDataURL('image/jpeg', PHOTO_QUALITE);
+          var base64 = donneesUrl.split(',')[1];
+          resoudre({
+            apercu: donneesUrl,
+            donnees: base64,
+            type: 'image/jpeg',
+            // Longueur du base64 → poids réel approché (4 caractères pour 3 octets).
+            octets: Math.round(base64.length * 0.75)
+          });
+        };
+        image.src = lecteur.result;
+      };
+      lecteur.readAsDataURL(fichier);
+    });
+  }
+
+  function ajouterPhotos(fichiers) {
+    var liste = Array.prototype.slice.call(fichiers || []);
+    if (liste.length === 0) return;
+
+    if (liste.length > placesPhotosRestantes()) {
+      afficherMessage('warn', 'Maximum ' + MAX_PHOTOS + ' photos : seules les ' +
+        placesPhotosRestantes() + ' premières sont retenues.');
+      liste = liste.slice(0, placesPhotosRestantes());
+    }
+
+    majBoutonsPhotos(true);
+    var suite = Promise.resolve();
+    liste.forEach(function (fichier) {
+      suite = suite.then(function () {
+        return redimensionnerImage(fichier).then(function (photo) {
+          photos.push(photo);
+          afficherVignettes();
+        }).catch(function (err) {
+          afficherMessage('err', 'Photo non ajoutée : ' + err.message);
+        });
+      });
+    });
+    suite.then(function () { majBoutonsPhotos(false); });
+  }
+
+  function majBoutonsPhotos(enCours) {
+    var plein = placesPhotosRestantes() <= 0;
+    document.getElementById('btnAppareil').disabled = enCours || plein;
+    document.getElementById('btnGalerie').disabled = enCours || plein;
+    document.getElementById('btnAppareil').innerHTML = enCours
+      ? '⏳ Traitement…' : '&#128247; Prendre une photo';
+  }
+
+  function supprimerPhoto(index) {
+    photos.splice(index, 1);
+    afficherVignettes();
+    majBoutonsPhotos(false);
+  }
+
+  function afficherVignettes() {
+    var boite = document.getElementById('vignettes');
+    boite.innerHTML = photos.map(function (p, i) {
+      return '<div class="vignette">' +
+        '<img src="' + p.apercu + '" alt="Photo ' + (i + 1) + '">' +
+        '<button type="button" onclick="supprimerPhoto(' + i + ')" aria-label="Supprimer">✕</button>' +
+        '<div class="vignette-poids">' + Math.round(p.octets / 1024) + ' Ko</div>' +
+        '</div>';
+    }).join('');
+    majBoutonsPhotos(false);
+  }
+
+  // Ce qui part au serveur : sans l'aperçu, qui ne sert qu'à l'écran et doublerait
+  // le poids de la fiche en file d'attente.
+  function photosPourEnvoi() {
+    return photos.map(function (p) { return { donnees: p.donnees, type: p.type }; });
+  }
+
+  document.getElementById('fichierAppareil').addEventListener('change', function () {
+    ajouterPhotos(this.files);
+    this.value = '';   // permet de reprendre deux fois la même photo
+  });
+  document.getElementById('fichierGalerie').addEventListener('change', function () {
+    ajouterPhotos(this.files);
+    this.value = '';
+  });
 
   /* ── Code postal ⇄ ville (API publique geo.api.gouv.fr) ─────────────────
      Repris de la page de vente du registre, dans les deux sens. Aucune clé, aucun
