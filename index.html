@@ -465,6 +465,57 @@
     </div>
   </div>
 
+  <!-- ── Coordonnées ── -->
+  <div class="section">
+    <div class="sec-title">&#128100; Ses coordonnées</div>
+
+    <div class="fb duo">
+      <div>
+        <div class="fl">Nom</div>
+        <input type="text" class="fv" id="nom" autocomplete="family-name" autocapitalize="words">
+      </div>
+      <div>
+        <div class="fl">Prénom</div>
+        <input type="text" class="fv" id="prenom" autocomplete="given-name" autocapitalize="words">
+      </div>
+    </div>
+
+    <div class="fb">
+      <div class="fl">Téléphone</div>
+      <!-- type=tel : ouvre le pavé numérique, pas le clavier alphabétique -->
+      <input type="tel" class="fv" id="telephone" autocomplete="tel" placeholder="06 12 34 56 78">
+    </div>
+
+    <div class="fb">
+      <div class="fl">Email</div>
+      <input type="email" class="fv" id="email" autocomplete="email"
+             autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="nom@exemple.fr">
+    </div>
+
+    <div class="fb">
+      <div class="fl">Adresse <span class="opt">— facultatif</span></div>
+      <input type="text" class="fv" id="adresse" autocomplete="street-address" placeholder="N° et rue">
+    </div>
+
+    <div class="fb duo-cp">
+      <div class="champ-suggest">
+        <div class="fl">Code postal</div>
+        <input type="text" class="fv" id="codePostal" inputmode="numeric"
+               autocomplete="postal-code" maxlength="10" placeholder="24100">
+        <div class="ville-suggestions" id="villeSuggestions"></div>
+      </div>
+      <div class="champ-suggest">
+        <div class="fl">Ville</div>
+        <input type="text" class="fv" id="ville" autocomplete="address-level2" autocapitalize="words">
+        <div class="ville-suggestions" id="communeSuggestions"></div>
+      </div>
+    </div>
+
+    <div class="aide" style="margin-top:0.75rem">
+      Au minimum un nom ou un moyen de rappel (téléphone ou email).
+    </div>
+  </div>
+
   <!-- ── Photos ───────────────────────────────────────────────────────────
        Deux boutons plutôt qu'un seul champ : sur un stand, « prendre une photo »
        doit ouvrir l'appareil du premier coup, sans passer par un sélecteur.
@@ -517,57 +568,6 @@
         le plus souvent du JPEG, même quand la galerie est en HEIC.</p>
       </div>
     </details>
-  </div>
-
-  <!-- ── Coordonnées ── -->
-  <div class="section">
-    <div class="sec-title">&#128100; Ses coordonnées</div>
-
-    <div class="fb duo">
-      <div>
-        <div class="fl">Nom</div>
-        <input type="text" class="fv" id="nom" autocomplete="family-name" autocapitalize="words">
-      </div>
-      <div>
-        <div class="fl">Prénom</div>
-        <input type="text" class="fv" id="prenom" autocomplete="given-name" autocapitalize="words">
-      </div>
-    </div>
-
-    <div class="fb">
-      <div class="fl">Téléphone</div>
-      <!-- type=tel : ouvre le pavé numérique, pas le clavier alphabétique -->
-      <input type="tel" class="fv" id="telephone" autocomplete="tel" placeholder="06 12 34 56 78">
-    </div>
-
-    <div class="fb">
-      <div class="fl">Email</div>
-      <input type="email" class="fv" id="email" autocomplete="email"
-             autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="nom@exemple.fr">
-    </div>
-
-    <div class="fb">
-      <div class="fl">Adresse <span class="opt">— facultatif</span></div>
-      <input type="text" class="fv" id="adresse" autocomplete="street-address" placeholder="N° et rue">
-    </div>
-
-    <div class="fb duo-cp">
-      <div class="champ-suggest">
-        <div class="fl">Code postal</div>
-        <input type="text" class="fv" id="codePostal" inputmode="numeric"
-               autocomplete="postal-code" maxlength="10" placeholder="24100">
-        <div class="ville-suggestions" id="villeSuggestions"></div>
-      </div>
-      <div class="champ-suggest">
-        <div class="fl">Ville</div>
-        <input type="text" class="fv" id="ville" autocomplete="address-level2" autocapitalize="words">
-        <div class="ville-suggestions" id="communeSuggestions"></div>
-      </div>
-    </div>
-
-    <div class="aide" style="margin-top:0.75rem">
-      Au minimum un nom ou un moyen de rappel (téléphone ou email).
-    </div>
   </div>
 
   <!-- ── Consentement ── -->
