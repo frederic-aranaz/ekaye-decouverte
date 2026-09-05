@@ -11,7 +11,7 @@
  * l'ancienne indéfiniment : c'est le seul piège de ce fichier.
  */
 
-var VERSION = 'v6';   // v6 : thématique « Vente » ajoutée (26/08/2026)
+var VERSION = 'v7';   // v7 : bon de commande dans « Sa demande » (05/09/2026)
 var CACHE = 'ekaye-decouverte-' + VERSION;
 
 var FICHIERS = [

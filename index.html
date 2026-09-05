@@ -308,6 +308,21 @@
       border-top: 1px solid var(--borderdiv);
     }
 
+    /* ── Bon de commande ── */
+    .solde {
+      margin-top: 0.85rem; padding: 0.7rem 0.85rem;
+      background: rgba(201,136,42,0.10);
+      border: 1px solid rgba(201,136,42,0.45);
+      border-radius: 8px;
+      font-size: 13.5px; color: var(--text); line-height: 1.5;
+    }
+    .solde strong { color: var(--ek-dark); font-size: 16px; }
+    .solde.faux {
+      background: rgba(207,107,90,0.10);
+      border-color: rgba(207,107,90,0.5);
+      color: var(--err);
+    }
+
     /* ── Boutons ── */
     .btn-principal {
       width: calc(100% - 1.5rem);
@@ -462,6 +477,56 @@
     <div class="fb">
       <div class="fl">Détail <span class="opt">— facultatif</span></div>
       <textarea id="demande" placeholder="Ce qu'il ou elle recherche, dimensions, délai, budget évoqué…"></textarea>
+    </div>
+
+    <!-- ── Bon de commande ────────────────────────────────────────────────
+         La commande se SUPERPOSE à la thématique, elle ne la remplace pas :
+         une commande de vitrail reste une « Création », une réparation payée
+         d'avance reste une « Réparation ».
+
+         Replié par défaut. La grande majorité des découvertes ne sont pas des
+         commandes, et un formulaire qui montre tout tout le temps finit par
+         ne plus être rempli du tout sur un stand. -->
+    <div class="rgpd" id="blocCommande" style="margin-top:0.85rem">
+      <label>
+        <input type="checkbox" id="estCommande">
+        <span class="rgpd-txt">C'est une <strong>commande</strong> — établir un bon</span>
+      </label>
+
+      <div id="champsCommande" style="display:none;margin-top:0.9rem">
+        <div class="fb">
+          <div class="fl">Montant total <span class="oblig">*</span></div>
+          <input type="text" class="fv" id="montantTotal" inputmode="decimal"
+                 autocomplete="off" placeholder="1200,00">
+        </div>
+
+        <div class="fb">
+          <div class="fl">Ce qui est versé aujourd'hui <span class="oblig">*</span></div>
+          <div class="pills" id="pillsReglement"></div>
+        </div>
+
+        <div class="fb" id="blocVerse" style="display:none">
+          <div class="fl">Montant de l'acompte <span class="oblig">*</span></div>
+          <input type="text" class="fv" id="montantVerse" inputmode="decimal"
+                 autocomplete="off" placeholder="0,00">
+        </div>
+
+        <div class="fb" id="blocModePaiement" style="display:none">
+          <div class="fl">Mode de paiement <span class="oblig">*</span></div>
+          <div class="pills" id="pillsModePaiement"></div>
+        </div>
+
+        <!-- Le solde se calcule sous les yeux de la personne qui saisit, DEVANT le
+             client. Une soustraction faite de tête sur un stand est une soustraction
+             fausse un jour sur dix. -->
+        <div class="solde" id="soldeApercu" style="display:none"></div>
+
+        <div class="rgpd-note">
+          Le numéro du bon est attribué à l'enregistrement, et figure sur le
+          récapitulatif envoyé au client. Faites signer : la signature couvre
+          les montants.
+        </div>
+      </div>
     </div>
   </div>
 
@@ -660,11 +725,18 @@
     lieux: ['Atelier', 'Expo', 'Boutique LAM'],
     thematiques: ['Création', 'Réparation', 'Demande de RDV atelier', 'Atelier', 'Vente', 'Autre'],
     saisisseurs: ['Frédéric', 'Manuela'],
+    // Repris du registre de vente, plus le virement : voir MODES_PAIEMENT côté script.
+    modesPaiement: ['CB', 'Espèces', 'Chèque', 'Virement', 'Stripe', 'PayPal'],
     expos: []
   };
 
+  // Ces trois-là ne viennent PAS du serveur : ce sont des raccourcis de saisie, pas des
+  // valeurs stockées. Le script, lui, déduit le règlement des seuls montants — recevoir
+  // l'étiquette ET les montants, ce serait accepter qu'ils se contredisent un jour.
+  var REGLEMENTS = ['Acompte', 'Réglé en totalité', 'Rien versé'];
+
   var listes = LISTES_REPLI;
-  var choix = { saisiPar: '', lieu: '', thematique: '' };
+  var choix = { saisiPar: '', lieu: '', thematique: '', reglement: '', modePaiement: '' };
 
   function urlApi() { return localStorage.getItem(CLE_URL) || URL_API_DEFAUT; }
 
@@ -900,8 +972,12 @@
       lieux: (nouvelles && nouvelles.lieux) || LISTES_REPLI.lieux,
       thematiques: (nouvelles && nouvelles.thematiques) || LISTES_REPLI.thematiques,
       saisisseurs: (nouvelles && nouvelles.saisisseurs) || LISTES_REPLI.saisisseurs,
+      modesPaiement: (nouvelles && nouvelles.modesPaiement) || LISTES_REPLI.modesPaiement,
       expos: (nouvelles && nouvelles.expos) || []
     };
+
+    construirePastilles('pillsReglement', REGLEMENTS, 'reglement', appliquerReglement);
+    construirePastilles('pillsModePaiement', listes.modesPaiement, 'modePaiement', majSolde);
 
     construirePastilles('pillsSaisiPar', listes.saisisseurs, 'saisiPar', function (valeur) {
       localStorage.setItem(CLE_SAISISSEUR, valeur);
@@ -975,6 +1051,32 @@
       return afficherMessage('err', 'Vérifiez l\'adresse email : ' + email);
     }
 
+    if (estCommande()) {
+      var totalSaisi = lireMontant(valeur1('montantTotal'));
+      if (totalSaisi === null || centimes(totalSaisi) <= 0) {
+        return afficherMessage('err', 'Bon de commande : indiquez le montant total.');
+      }
+      if (!valeur('nom') && !valeur('prenom')) {
+        return afficherMessage('err',
+          'Bon de commande : il faut au moins un nom ou un prénom — un bon anonyme n\'est pas un contrat.');
+      }
+      if (!choix.reglement) {
+        return afficherMessage('err', 'Bon de commande : dites ce qui est versé aujourd\'hui.');
+      }
+      if (choix.reglement !== 'Rien versé') {
+        var verseSaisi = lireMontant(valeur1('montantVerse'));
+        if (verseSaisi === null || centimes(verseSaisi) <= 0) {
+          return afficherMessage('err', 'Bon de commande : indiquez le montant versé.');
+        }
+        if (centimes(verseSaisi) > centimes(totalSaisi)) {
+          return afficherMessage('err', 'Bon de commande : le versement dépasse le total.');
+        }
+        if (!choix.modePaiement) {
+          return afficherMessage('err', 'Bon de commande : indiquez le mode de paiement.');
+        }
+      }
+    }
+
     var fiche = {
       idFiche: genererIdFiche(),
       dateContact: valeur('dateContact'),
@@ -993,7 +1095,8 @@
       demande: valeur('demande'),
       accordRecontact: accord,
       photos: photosPourEnvoi(),
-      signature: signaturePourEnvoi()
+      signature: signaturePourEnvoi(),
+      commande: commandePourEnvoi()
     };
 
     memoriserContexte();
@@ -1044,6 +1147,14 @@
           }
         }
 
+        // Le numéro du bon s'affiche en clair : sur un stand, il se recopie à la main
+        // sur le double papier du client avant qu'il ne parte.
+        if (resultat && resultat.bonCommande) {
+          suite = ' Bon de commande ' + resultat.bonCommande + '.' +
+            (resultat.soldeDu > 0 ? ' Reste à régler ' + formaterEuros(resultat.soldeDu) + '.' : '') +
+            suite;
+        }
+
         var typeMessage = (alerte || (fiche.accordRecontact && !(resultat && resultat.emailConfirmationEnvoye)))
           ? 'warn' : 'ok';
         afficherMessage(typeMessage, 'Fiche enregistrée.' + suite);
@@ -1072,6 +1183,119 @@
       });
   }
 
+  /* ── Bon de commande ────────────────────────────────────────────────────
+     Copie fidèle de montantEnEuros_ côté script : mêmes entrées acceptées, mêmes
+     entrées refusées. Le script refait TOUS ces contrôles et fait autorité — ce qui
+     est fait ici évite un aller-retour réseau et, hors ligne, évite qu'une fiche
+     parte en file d'attente pour être refusée trois heures plus tard. */
+  function lireMontant(valeurBrute) {
+    if (valeurBrute === null || valeurBrute === undefined || valeurBrute === '') return null;
+    var brut = String(valeurBrute).trim()
+      .replace(/[\s\u00A0\u202F]/g, '')
+      .replace(/€|EUR/gi, '')
+      .replace(',', '.');
+    if (!/^[0-9]+(\.[0-9]{1,2})?$/.test(brut)) return null;
+    var n = parseFloat(brut);
+    return isFinite(n) ? Math.round(n * 100) / 100 : null;
+  }
+
+  function centimes(euros) { return Math.round(Number(euros || 0) * 100); }
+
+  function formaterEuros(montant) {
+    return Number(montant || 0).toFixed(2).replace('.', ',') + ' €';
+  }
+
+  function estCommande() {
+    return document.getElementById('estCommande').checked;
+  }
+
+  // Les trois raccourcis. « Réglé en totalité » recopie le total : c'est le geste que
+  // l'on faisait de tête, et c'est celui qui se trompait.
+  function appliquerReglement(valeur) {
+    var verse = document.getElementById('montantVerse');
+    if (valeur === 'Rien versé') {
+      verse.value = '';
+      choix.modePaiement = '';
+      majPastilles('pillsModePaiement', '');
+    } else if (valeur === 'Réglé en totalité') {
+      var total = lireMontant(valeur1('montantTotal'));
+      // Deux décimales toujours : « 1200,5 » dans un champ d'argent qu'on relit à voix
+      // haute devant le client, c'est une hésitation de trop.
+      verse.value = total === null ? '' : total.toFixed(2).replace('.', ',');
+    }
+    majSolde();
+  }
+
+  function majPastilles(conteneurId, valeur) {
+    var conteneur = document.getElementById(conteneurId);
+    if (!conteneur) return;
+    Array.prototype.forEach.call(conteneur.children, function (b) {
+      b.classList.toggle('on', b.textContent === valeur);
+    });
+  }
+
+  // Petit alias : `valeur` est déjà pris par le paramètre des rappels de pastille.
+  function valeur1(id) { return document.getElementById(id).value.trim(); }
+
+  // Montre le solde AU MOMENT de la saisie, devant le client. C'est aussi ici que les
+  // incohérences se voient tout de suite, plutôt qu'au refus du serveur.
+  function majSolde() {
+    var ouvert = estCommande();
+    document.getElementById('champsCommande').style.display = ouvert ? 'block' : 'none';
+    if (!ouvert) return;
+
+    var rien = choix.reglement === 'Rien versé';
+    document.getElementById('blocVerse').style.display =
+      (choix.reglement === 'Acompte') ? 'block' : 'none';
+    document.getElementById('blocModePaiement').style.display =
+      (choix.reglement && !rien) ? 'block' : 'none';
+
+    var apercu = document.getElementById('soldeApercu');
+    var total = lireMontant(valeur1('montantTotal'));
+    var verse = rien ? 0 : lireMontant(valeur1('montantVerse'));
+    if (rien) verse = 0;
+
+    if (total === null) {
+      apercu.style.display = 'none';
+      return;
+    }
+    apercu.style.display = 'block';
+
+    if (verse === null) {
+      apercu.className = 'solde faux';
+      apercu.textContent = 'Montant versé illisible.';
+      return;
+    }
+    if (centimes(verse) > centimes(total)) {
+      apercu.className = 'solde faux';
+      apercu.textContent = 'Le versement (' + formaterEuros(verse) +
+        ') dépasse le total (' + formaterEuros(total) + ').';
+      return;
+    }
+    var reste = Math.round((total - verse) * 100) / 100;
+    apercu.className = 'solde';
+    if (centimes(reste) <= 0) {
+      apercu.innerHTML = 'Réglé en totalité &middot; <strong>' + formaterEuros(total) + '</strong>';
+    } else if (centimes(verse) > 0) {
+      apercu.innerHTML = 'Versé ' + formaterEuros(verse) + ' &middot; reste à régler <strong>' +
+        formaterEuros(reste) + '</strong>';
+    } else {
+      // « Versé 0,00 € » se lit comme une erreur de saisie. Rien versé se dit en mots.
+      apercu.innerHTML = 'Rien versé &middot; à régler <strong>' +
+        formaterEuros(reste) + '</strong>';
+    }
+  }
+
+  function commandePourEnvoi() {
+    if (!estCommande()) return null;
+    return {
+      estCommande: true,
+      montantTotal: valeur1('montantTotal'),
+      verse: choix.reglement === 'Rien versé' ? '' : valeur1('montantVerse'),
+      modePaiement: choix.reglement === 'Rien versé' ? '' : choix.modePaiement
+    };
+  }
+
   // Le lieu, le nom de l'expo et la date restent en place : c'est le même stand et le
   // même jour pour le visiteur suivant. Tout ce qui est personnel est effacé.
   function viderFormulaire() {
@@ -1096,6 +1320,18 @@
     // le visiteur suivant serait un faux.
     signature = null;
     afficherSignature();
+    // Un montant laissé à l'écran se retrouverait sur le bon du visiteur suivant. Même
+    // raison que les photos et la signature, en pire : c'est de l'argent.
+    document.getElementById('estCommande').checked = false;
+    document.getElementById('blocCommande').classList.remove('on');
+    document.getElementById('montantTotal').value = '';
+    document.getElementById('montantVerse').value = '';
+    choix.reglement = '';
+    choix.modePaiement = '';
+    majPastilles('pillsReglement', '');
+    majPastilles('pillsModePaiement', '');
+    document.getElementById('soldeApercu').style.display = 'none';
+    majSolde();
   }
 
   /* ── Réglages ───────────────────────────────────────────────────────────── */
@@ -1361,10 +1597,25 @@
     var qui = (valeur('prenom') + ' ' + valeur('nom')).trim();
     var lieu = choix.lieu === 'Expo' ? 'Expo — ' + valeur('nomExpo') : (choix.lieu || '—');
     var quoi = choix.thematique === 'Autre' ? valeur('precision') : (choix.thematique || '—');
+    // Les montants figurent SUR le pavé de signature : la personne doit voir ce
+    // qu'elle signe, et c'est bien l'argent qu'elle signe (G19).
+    var argent = null;
+    if (estCommande()) {
+      var t = lireMontant(valeur1('montantTotal'));
+      var v = choix.reglement === 'Rien versé' ? 0 : lireMontant(valeur1('montantVerse'));
+      if (t !== null && v !== null && centimes(v) <= centimes(t)) {
+        var reste = Math.round((t - v) * 100) / 100;
+        argent = 'Commande ' + formaterEuros(t) +
+          (centimes(v) > 0 ? ' &middot; versé ' + formaterEuros(v) +
+            (choix.modePaiement ? ' (' + echapper(choix.modePaiement) + ')' : '') : '') +
+          ' &middot; reste ' + formaterEuros(reste);
+      }
+    }
     var morceaux = [
       '<strong>' + echapper(quoi) + '</strong> — ' + echapper(lieu),
       qui ? 'Pour ' + echapper(qui) : null,
       valeur('demande') ? echapper(valeur('demande')) : null,
+      argent,
       photos.length ? photos.length + ' photo(s) jointe(s) au constat' : 'Aucune photo'
     ].filter(Boolean);
     return morceaux.join('<br>');
@@ -1606,6 +1857,17 @@
     });
 
     document.getElementById('nomExpo').addEventListener('change', memoriserContexte);
+
+    // Bon de commande : la case ouvre le bloc, les deux montants rafraîchissent le
+    // solde à chaque frappe. `input` et non `change` : le solde doit suivre le doigt,
+    // pas attendre que le champ perde le focus — sur un téléphone, il ne le perd
+    // souvent jamais avant l'envoi.
+    document.getElementById('estCommande').addEventListener('change', function () {
+      document.getElementById('blocCommande').classList.toggle('on', this.checked);
+      majSolde();
+    });
+    document.getElementById('montantTotal').addEventListener('input', majSolde);
+    document.getElementById('montantVerse').addEventListener('input', majSolde);
 
     majEtatReseau();
     afficherFileAttente();
