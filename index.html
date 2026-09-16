@@ -174,6 +174,15 @@
     .ville-suggestions button:last-child { border-bottom: none; }
     .ville-suggestions button:active, .ville-suggestions button:hover { background: rgba(201,136,42,0.12); }
     .champ-suggest { position: relative; }
+    .contact-suggestions .detail {
+      display: block; margin-top: 2px;
+      color: var(--text-3); font-size: 12px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .contact-suggestions .source {
+      padding: 6px 14px; color: var(--text-3); font-size: 11px;
+      border-bottom: 1px solid var(--borderdiv);
+    }
 
     /* ── Photos ── */
     .photo-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
@@ -534,7 +543,7 @@
   <div class="section">
     <div class="sec-title">&#128100; Ses coordonnées</div>
 
-    <div class="fb duo">
+    <div class="fb duo champ-suggest">
       <div>
         <div class="fl">Nom</div>
         <input type="text" class="fv" id="nom" autocomplete="family-name" autocapitalize="words">
@@ -543,6 +552,7 @@
         <div class="fl">Prénom</div>
         <input type="text" class="fv" id="prenom" autocomplete="given-name" autocapitalize="words">
       </div>
+      <div class="ville-suggestions contact-suggestions" id="contactSuggestions"></div>
     </div>
 
     <div class="fb">
@@ -1306,6 +1316,7 @@
     // Les listes de communes du visiteur précédent n'ont rien à faire devant le suivant.
     masquerSuggestionsVille();
     masquerSuggestionsCommune();
+    masquerSuggestionsContact();
     codePostalRecherche = '';
     communeRecherche = '';
     choix.thematique = '';
@@ -1795,6 +1806,83 @@
   document.getElementById('ville').addEventListener('input', chercherCommunesParNom);
   document.getElementById('ville').addEventListener('blur', function () {
     setTimeout(masquerSuggestionsCommune, 150);
+  });
+
+  /* ── Nom / prénom → carnet Google (pré-remplissage) ─────────────────────
+     Dès trois lettres dans Nom ou Prénom, le script cherche dans le carnet de
+     Frédéric et propose au plus cinq contacts. Rien ne se déclenche sans réseau,
+     sans URL réglée ou sans clé déjà enregistrée : on ne demande jamais la clé au
+     milieu d'une frappe. Toute panne est muette, la saisie à la main continue. */
+
+  var contactRecherche = '';
+  var contactRechercheTimer = null;
+  var contactsProposes = [];
+
+  function masquerSuggestionsContact() {
+    var box = document.getElementById('contactSuggestions');
+    box.classList.remove('visible');
+    box.innerHTML = '';
+    contactsProposes = [];
+  }
+
+  function chercherContactsCarnet(e) {
+    var champ = e.target;
+    var requete = champ.value.trim();
+    clearTimeout(contactRechercheTimer);
+    if (requete.length < 3) {
+      masquerSuggestionsContact();
+      contactRecherche = '';
+      return;
+    }
+    if (!navigator.onLine || !urlApiConfiguree() || !localStorage.getItem(CLE_ACCES)) return;
+
+    contactRechercheTimer = setTimeout(function () {
+      if (requete === contactRecherche) return;
+      contactRecherche = requete;
+      appelApi('chercherContacts', { requete: requete })
+        .then(function (reponse) {
+          // La saisie a continué pendant l'appel : cette réponse est périmée.
+          if (champ.value.trim() !== requete) return;
+          var contacts = (reponse && reponse.contacts) || [];
+          if (contacts.length === 0) { masquerSuggestionsContact(); return; }
+          contactsProposes = contacts;
+          var box = document.getElementById('contactSuggestions');
+          box.innerHTML = '<div class="source">Dans le carnet Google</div>' +
+            contacts.map(function (c, i) {
+              var nomAffiche = [c.prenom, c.nom].filter(Boolean).join(' ') || c.email;
+              var detail = [c.telephone, c.email, c.ville].filter(Boolean).join(' · ');
+              return '<button type="button" onclick="choisirContact(' + i + ')">' +
+                echapper(nomAffiche) +
+                (detail ? '<span class="detail">' + echapper(detail) + '</span>' : '') +
+                '</button>';
+            }).join('');
+          box.classList.add('visible');
+        })
+        .catch(function () { /* hors ligne, clé refusée, quota : saisie manuelle */ });
+    }, 400);
+  }
+
+  // Nom et prénom prennent ceux du contact : ce qu'on y tapait servait à le chercher.
+  // Tout le reste n'est rempli que s'il est vide — jamais par-dessus une saisie.
+  function choisirContact(i) {
+    var c = contactsProposes[i];
+    if (!c) return;
+    ['nom', 'prenom'].forEach(function (id) {
+      if (c[id]) document.getElementById(id).value = c[id];
+    });
+    ['telephone', 'email', 'adresse', 'codePostal', 'ville'].forEach(function (id) {
+      var champ = document.getElementById(id);
+      if (c[id] && !champ.value.trim()) champ.value = c[id];
+    });
+    masquerSuggestionsContact();
+  }
+
+  ['nom', 'prenom'].forEach(function (id) {
+    var champ = document.getElementById(id);
+    champ.addEventListener('input', chercherContactsCarnet);
+    champ.addEventListener('blur', function () {
+      setTimeout(masquerSuggestionsContact, 150);
+    });
   });
 
   /* ── État du réseau ─────────────────────────────────────────────────────── */
