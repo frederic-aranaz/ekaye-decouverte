@@ -11,7 +11,7 @@
  * l'ancienne indéfiniment : c'est le seul piège de ce fichier.
  */
 
-var VERSION = 'v9';   // v9 : la clé d'accès se saisit et se vérifie dans les réglages (29/09/2026)
+var VERSION = 'v10';  // v10 : le refus de clé dit où chercher (29/09/2026)
 var CACHE = 'ekaye-decouverte-' + VERSION;
 
 var FICHIERS = [

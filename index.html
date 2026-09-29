@@ -720,7 +720,7 @@
         <div class="aide" id="etatCle"></div>
       </div>
       <div class="fb">
-        <button type="button" class="btn-second" onclick="verifierEtEnregistrerCle()">Vérifier et enregistrer la clé</button>
+        <button type="button" class="btn-second" id="btnVerifierCle" onclick="verifierEtEnregistrerCle()">Vérifier et enregistrer la clé</button>
       </div>
       <div class="aide" id="infoVersion"></div>
     </div>
@@ -736,7 +736,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v9';
+  var VERSION_PAGE = 'v10';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -803,6 +803,54 @@
       : 'Aucune clé sur cet appareil : rien ne peut partir tant qu\'elle n\'est pas saisie.';
   }
 
+  /* ── Diagnostic d'une clé refusée ───────────────────────────────────────
+     « Refusée » tout court ne dit pas où chercher, et on retape 28 caractères en
+     aveugle. Or le script tire ses clés d'un alphabet fermé — genererChaineAleatoire_ :
+     lettres et chiffres, sans 0, O, 1, l, I (ni o minuscule). Tout ce qui n'en fait
+     pas partie est un accident : une espace, un retour à la ligne, un caractère
+     invisible ramassé en copiant depuis le tableau des propriétés du script, ou un
+     caractère mal relu. Ça se nomme, plutôt que de se deviner.
+
+     Ce diagnostic ne BLOQUE jamais l'envoi : le script garde le dernier mot. Il
+     s'ajoute au refus, une fois que le refus est tombé. */
+  var ALPHABET_CLE = /[A-HJ-NP-Za-km-np-z2-9]/;
+  var LONGUEUR_CLE_ATTENDUE = 28;
+
+  function diagnosticCle(cle) {
+    var notes = [];
+
+    var intrus = [];
+    cle.split('').forEach(function (c) {
+      if (ALPHABET_CLE.test(c) || intrus.indexOf(c) !== -1) return;
+      intrus.push(c);
+    });
+    if (intrus.length) {
+      notes.push('Caractères impossibles dans une clé du script : ' +
+        intrus.map(nommerCaractere).join(', ') + '.');
+    }
+
+    if (cle.length !== LONGUEUR_CLE_ATTENDUE) {
+      notes.push('Longueur reçue : ' + cle.length + ' caractères, au lieu des ' +
+        LONGUEUR_CLE_ATTENDUE + ' d\'une clé générée par le script.');
+    }
+
+    return notes;
+  }
+
+  function nommerCaractere(c) {
+    var connus = {
+      '0': 'un zéro', 'O': 'un O majuscule', '1': 'un chiffre un',
+      'l': 'un L minuscule', 'I': 'un i majuscule', 'o': 'un o minuscule',
+      ' ': 'une espace'
+    };
+    if (connus[c]) return connus[c] + ' (la clé n\'en contient jamais)';
+    var code = c.charCodeAt(0);
+    if (code < 32 || code === 127 || code === 8203 || code === 65279) {
+      return 'un caractère invisible (venu du copier-coller)';
+    }
+    return '« ' + c + ' »';
+  }
+
   // Une clé n'est jamais enregistrée sur parole : elle est essayée contre le script
   // AVANT d'être gardée. L'inverse — enregistrer, puis découvrir le refus à la
   // première fiche, devant quelqu'un — est exactement ce qu'on corrige ici.
@@ -825,9 +873,17 @@
         'Le premier envoi dira si elle est bonne.');
     }
 
+    // Le bouton se verrouille le temps de l'aller-retour. Deux appuis coup sur coup
+    // faisaient arriver deux réponses dans le désordre, et le diagnostic affiché
+    // pouvait porter sur la clé PRÉCÉDENTE — le contraire de ce qu'on cherche ici.
+    var btn = document.getElementById('btnVerifierCle');
+    btn.disabled = true;
+    var rendreLeBouton = function () { btn.disabled = false; };
+
     afficherMessage('ok', 'Vérification de la clé…');
     appelApiAvecCle('getListes', null, cle)
       .then(function (recues) {
+        rendreLeBouton();
         localStorage.setItem(CLE_ACCES, cle);
         document.getElementById('cleApiChamp').value = '';
         majEtatCle();
@@ -839,12 +895,17 @@
         viderFileAttente();
       })
       .catch(function (err) {
+        rendreLeBouton();
         // Rien n'est enregistré : une clé déjà en place ne se perd pas sur une faute
         // de frappe dans le champ.
         if (err && err.authRefusee) {
+          var notes = diagnosticCle(cle);
           return afficherMessage('err', 'Clé refusée par le script — rien n\'a été enregistré. ' +
-            'Vérifiez la casse : elle distingue majuscules et minuscules, et ne contient ' +
-            'ni 0, ni O, ni 1, ni l, ni I.');
+            (notes.length
+              ? notes.join(' ')
+              : 'Rien d\'anormal dans ce qui a été envoyé : ' + cle.length + ' caractères, ' +
+                'tous possibles. Vérifiez alors la casse, puis l\'adresse de l\'application ' +
+                'juste au-dessus — une clé n\'est valable que pour SON script.'));
         }
         afficherMessage('err', 'Impossible de vérifier la clé : ' +
           ((err && err.message) || 'appel impossible') + '. Rien n\'a été enregistré.');
