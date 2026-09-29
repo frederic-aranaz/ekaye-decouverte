@@ -706,8 +706,21 @@
         <input type="text" class="fv" id="urlApi" autocapitalize="off" autocorrect="off" spellcheck="false">
       </div>
       <div class="fb">
-        <button type="button" class="btn-second" onclick="sauverReglages()">Enregistrer les réglages</button>
-        <button type="button" class="btn-second" onclick="changerCle()">Changer la clé d'accès</button>
+        <button type="button" class="btn-second" onclick="sauverReglages()">Enregistrer l'adresse</button>
+      </div>
+
+      <!-- La clé se saisit dans un VRAI champ, jamais dans window.prompt : une invite
+           native n'accepte pas autocapitalize, et le clavier d'un téléphone met alors
+           une majuscule au premier caractère. La clé étant en casse mixte, cela
+           suffisait à la faire refuser — indéfiniment, puisqu'un refus la redemandait. -->
+      <div class="fb">
+        <div class="fl">Clé d'accès (donnée par Frédéric)</div>
+        <input type="text" class="fv" id="cleApiChamp" autocapitalize="off" autocorrect="off"
+               autocomplete="off" spellcheck="false" placeholder="28 caractères, majuscules ET minuscules">
+        <div class="aide" id="etatCle"></div>
+      </div>
+      <div class="fb">
+        <button type="button" class="btn-second" onclick="verifierEtEnregistrerCle()">Vérifier et enregistrer la clé</button>
       </div>
       <div class="aide" id="infoVersion"></div>
     </div>
@@ -720,6 +733,10 @@
   // URL /exec du déploiement Apps Script. Modifiable sur l'appareil via les réglages,
   // ce qui évite de republier la page pour un simple redéploiement du script.
   var URL_API_DEFAUT = 'https://script.google.com/macros/s/AKfycbw3cfEqn0p-OUw4Ur4AxoT38okfzZMi8b39WBhawWJ0vRCVebvD3T-UYTTGgjWKvEc-/exec';
+
+  // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
+  // le téléphone, si la page servie est bien la dernière publiée.
+  var VERSION_PAGE = 'v9';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -761,21 +778,77 @@
 
   /* ── Clé d'accès ────────────────────────────────────────────────────────
      Cette page est publique : une clé écrite dans son code source serait lisible
-     par n'importe qui. Elle est donc demandée une fois par appareil et conservée
-     en local, jamais publiée. */
-  function cleApi() {
-    var cle = localStorage.getItem(CLE_ACCES);
-    if (!cle) {
-      cle = (window.prompt('Clé d\'accès (donnée par Frédéric) :') || '').trim();
-      if (cle) localStorage.setItem(CLE_ACCES, cle);
-    }
-    return cle;
+     par n'importe qui. Elle est donc saisie une fois par appareil et conservée
+     en local, jamais publiée.
+
+     Elle ne se demande JAMAIS au milieu d'une saisie. Une invite qui surgit pendant
+     l'envoi d'une fiche est le pire moment pour taper 28 caractères : c'est devant
+     un visiteur, et une invite native ne permet pas de couper la majuscule
+     automatique du clavier. Elle se règle donc au calme, dans les réglages, dans un
+     champ qui la coupe — et l'appel qui n'a pas de clé le dit franchement. */
+  function cleApi() { return (localStorage.getItem(CLE_ACCES) || '').trim(); }
+  function cleEnregistree() { return cleApi() !== ''; }
+
+  // Ce qu'on affiche d'une clé enregistrée : assez pour la comparer à la propriété
+  // CLE_API du script, pas assez pour qu'elle se relève par-dessus une épaule.
+  function empreinteCle(cle) {
+    if (cle.length < 10) return '(' + cle.length + ' caractère(s) — trop courte)';
+    return cle.slice(0, 3) + '…' + cle.slice(-3) + ' (' + cle.length + ' caractères)';
   }
-  function oublierCle() { localStorage.removeItem(CLE_ACCES); }
-  function changerCle() {
-    oublierCle();
-    cleApi();
-    afficherMessage('ok', 'Clé enregistrée sur cet appareil.');
+
+  function majEtatCle() {
+    document.getElementById('etatCle').textContent = cleEnregistree()
+      ? 'Enregistrée sur cet appareil : ' + empreinteCle(cleApi()) +
+        '. À comparer au besoin avec CLE_API dans les propriétés du script.'
+      : 'Aucune clé sur cet appareil : rien ne peut partir tant qu\'elle n\'est pas saisie.';
+  }
+
+  // Une clé n'est jamais enregistrée sur parole : elle est essayée contre le script
+  // AVANT d'être gardée. L'inverse — enregistrer, puis découvrir le refus à la
+  // première fiche, devant quelqu'un — est exactement ce qu'on corrige ici.
+  function verifierEtEnregistrerCle() {
+    var cle = valeur('cleApiChamp');
+    if (!cle) {
+      return afficherMessage('err', 'Saisissez la clé avant de l\'enregistrer.');
+    }
+    if (!urlApiConfiguree()) {
+      return afficherMessage('err',
+        'Réglez d\'abord l\'adresse de l\'application (URL en /exec), juste au-dessus.');
+    }
+    // Hors ligne, la vérification est impossible. Refuser d'enregistrer bloquerait un
+    // téléphone qu'on règle sur un stand sans réseau : on enregistre, et on le dit.
+    if (!navigator.onLine) {
+      localStorage.setItem(CLE_ACCES, cle);
+      document.getElementById('cleApiChamp').value = '';
+      majEtatCle();
+      return afficherMessage('warn', 'Clé enregistrée, mais PAS vérifiée : pas de réseau. ' +
+        'Le premier envoi dira si elle est bonne.');
+    }
+
+    afficherMessage('ok', 'Vérification de la clé…');
+    appelApiAvecCle('getListes', null, cle)
+      .then(function (recues) {
+        localStorage.setItem(CLE_ACCES, cle);
+        document.getElementById('cleApiChamp').value = '';
+        majEtatCle();
+        if (recues && !recues.erreur) {
+          localStorage.setItem(CLE_LISTES, JSON.stringify(recues));
+          appliquerListes(recues);
+        }
+        afficherMessage('ok', 'Clé acceptée et enregistrée sur cet appareil.');
+        viderFileAttente();
+      })
+      .catch(function (err) {
+        // Rien n'est enregistré : une clé déjà en place ne se perd pas sur une faute
+        // de frappe dans le champ.
+        if (err && err.authRefusee) {
+          return afficherMessage('err', 'Clé refusée par le script — rien n\'a été enregistré. ' +
+            'Vérifiez la casse : elle distingue majuscules et minuscules, et ne contient ' +
+            'ni 0, ni O, ni 1, ni l, ni I.');
+        }
+        afficherMessage('err', 'Impossible de vérifier la clé : ' +
+          ((err && err.message) || 'appel impossible') + '. Rien n\'a été enregistré.');
+      });
   }
 
   /* ── Appels au script ───────────────────────────────────────────────────
@@ -784,6 +857,12 @@
      Content-Type text/plain : évite la requête preflight CORS, qu'Apps Script
      ne sait pas honorer. */
   function appelApi(action, data) {
+    return appelApiAvecCle(action, data, cleApi());
+  }
+
+  // La clé est passée en argument, et non lue ici : c'est ce qui permet d'ESSAYER une
+  // clé candidate depuis les réglages sans toucher à celle qui est déjà en place.
+  function appelApiAvecCle(action, data, cle) {
     if (!urlApiConfiguree()) {
       var errConf = new Error(
         'L\'adresse de l\'application n\'est pas réglée sur cet appareil. ' +
@@ -791,18 +870,29 @@
       errConf.configManquante = true;
       return Promise.reject(errConf);
     }
+    // Une clé absente n'est ni une panne de réseau ni une clé refusée : le serveur
+    // répondrait « refusée » à une clé vide, et on chercherait une faute de frappe
+    // dans une clé qui n'a jamais été saisie. L'appel ne part donc même pas.
+    if (!cle) {
+      var errCle = new Error(
+        'Aucune clé d\'accès sur cet appareil. Ouvrez « Réglages de l\'appareil » ' +
+        'en bas de page et saisissez-la.');
+      errCle.cleManquante = true;
+      return Promise.reject(errCle);
+    }
     return fetch(urlApi(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: action, cle: cleApi(), data: data })
+      body: JSON.stringify({ action: action, cle: cle, data: data })
     })
     .then(function (r) { return r.json(); })
     .then(function (reponse) {
-      // Clé refusée : on l'oublie pour que la tentative suivante la redemande, plutôt
-      // que de boucler indéfiniment sur une clé fausse mémorisée.
+      // La clé refusée N'EST PLUS effacée. L'effacer obligeait à la ressaisir au refus
+      // suivant, dans une invite où le clavier remettait une majuscule au premier
+      // caractère : une seule erreur de frappe bouclait indéfiniment. Elle reste donc
+      // en place, lisible dans les réglages, où elle se corrige une fois pour toutes.
       if (reponse && reponse.authRefusee) {
-        oublierCle();
-        var err = new Error('Clé d\'accès refusée. Ressaisissez-la dans les réglages.');
+        var err = new Error('Clé d\'accès refusée. Corrigez-la dans « Réglages de l\'appareil ».');
         err.authRefusee = true;
         throw err;
       }
@@ -935,7 +1025,7 @@
         // au retour de la connexion, au prochain chargement, ou sur « Envoyer maintenant ».
         envoiEnCours = false;
         afficherFileAttente();
-        if (err && err.authRefusee) afficherMessage('err', err.message);
+        if (err && (err.authRefusee || err.cleManquante)) afficherMessage('err', err.message);
       });
   }
 
@@ -1172,16 +1262,15 @@
       })
       .catch(function (err) {
         rendreLeBouton();
-        if (err && err.authRefusee) {
-          afficherMessage('err', err.message);
-          return;
-        }
         // La fiche est mise de côté dans tous les cas — on ne perd jamais une saisie
         // faite devant quelqu'un. Seul le message change, parce que le geste à faire
-        // n'est pas le même : attendre le réseau, ou aller régler l'adresse.
+        // n'est pas le même : attendre le réseau, ou aller régler l'appareil.
+        // Un refus de clé passe ici aussi, désormais : garder le formulaire rempli en
+        // otage pendant qu'on corrige 28 caractères, c'est faire attendre le visiteur
+        // pour rien. L'idempotence par « ID fiche » couvre le renvoi.
         if (!mettreEnAttente(fiche)) return;   // mémoire pleine : on garde tout à l'écran
         viderFormulaire();
-        if (err && err.configManquante) {
+        if (err && (err.configManquante || err.cleManquante || err.authRefusee)) {
           afficherMessage('err', 'Fiche gardée sur ce téléphone, mais elle ne partira pas : ' +
             err.message);
           return;
@@ -1834,7 +1923,7 @@
       contactRecherche = '';
       return;
     }
-    if (!navigator.onLine || !urlApiConfiguree() || !localStorage.getItem(CLE_ACCES)) return;
+    if (!navigator.onLine || !urlApiConfiguree() || !cleEnregistree()) return;
 
     contactRechercheTimer = setTimeout(function () {
       if (requete === contactRecherche) return;
@@ -1931,6 +2020,10 @@
     // lit `choix` pour marquer d'emblée la bonne personne.
     choix.saisiPar = localStorage.getItem(CLE_SAISISSEUR) || '';
     document.getElementById('urlApi').value = urlApi();
+    majEtatCle();
+    // La version s'affiche : c'est le seul moyen, depuis le téléphone, de savoir s'il
+    // sert encore l'ancienne page en cache ou celle qui vient d'être publiée.
+    document.getElementById('infoVersion').textContent = 'Page ' + VERSION_PAGE + '.';
     majSousTitre();
 
     var enCache = null;
@@ -1966,6 +2059,16 @@
       afficherMessage('err',
         'Appareil pas encore réglé : ouvrez « Réglages de l\'appareil » en bas de page ' +
         'et collez l\'adresse de l\'application (URL en /exec).');
+      document.querySelector('details.reglages').open = true;
+      return;
+    }
+
+    // Même logique pour la clé : le dire à l'ouverture, au calme, plutôt que de la
+    // réclamer au moment d'envoyer la première fiche.
+    if (!cleEnregistree()) {
+      afficherMessage('err',
+        'Aucune clé d\'accès sur ce téléphone : ouvrez « Réglages de l\'appareil » en bas ' +
+        'de page et saisissez-la. D\'ici là, les fiches seront gardées, mais ne partiront pas.');
       document.querySelector('details.reglages').open = true;
       return;
     }
