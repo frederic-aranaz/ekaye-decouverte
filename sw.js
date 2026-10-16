@@ -11,7 +11,8 @@
  * l'ancienne indéfiniment : c'est le seul piège de ce fichier.
  */
 
-var VERSION = 'v11';  // v11 : lien vers le classeur a droite du titre (16/10/2026)
+var VERSION = 'v12';  // v12 : version du script affichee sous le titre (16/10/2026)
+// v11 : lien vers le classeur a droite du titre (16/10/2026)
 // v10 : le refus de cle dit ou chercher (29/09/2026)
 var CACHE = 'ekaye-decouverte-' + VERSION;
 

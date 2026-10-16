@@ -439,7 +439,7 @@
     <div>
       <h1>Découverte EKAYE</h1>
       <div class="topbar-sub" id="sousTitre">Prise de contact</div>
-      <div class="topbar-sub" id="versionPage">Page v11</div>
+      <div class="topbar-sub" id="versionPage">Page v12</div>
     </div>
     <div class="etat-reseau en-ligne" id="etatReseau">en ligne</div>
     <a class="topbar-classeur" href="https://docs.google.com/spreadsheets/d/1gkcXQ6iTaudY2BYY8FK2efazmJfao7V8utI1SWIyuRA/edit"
@@ -751,7 +751,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v11';
+  var VERSION_PAGE = 'v12';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -905,6 +905,7 @@
         if (recues && !recues.erreur) {
           localStorage.setItem(CLE_LISTES, JSON.stringify(recues));
           appliquerListes(recues);
+          afficherVersionScript(recues.versionScript);
         }
         afficherMessage('ok', 'Clé acceptée et enregistrée sur cet appareil.');
         viderFileAttente();
@@ -2075,6 +2076,16 @@
 
   /* ── Démarrage ──────────────────────────────────────────────────────────── */
 
+  // Le numéro du script ne s'affiche QUE s'il vient d'une réponse reçue à
+  // l'instant. Relu du cache il serait périmé sans qu'on le sache, et un numéro
+  // périmé est pire que pas de numéro : on croirait avoir vérifié. Tant que le
+  // script n'a pas répondu, la ligne ne porte donc que la version de la page.
+  function afficherVersionScript(numero) {
+    if (!numero) return;
+    document.getElementById('versionPage').textContent =
+      'Page ' + VERSION_PAGE + ' · Script @' + numero;
+  }
+
   function chargerListes() {
     if (!navigator.onLine) return;
     appelApi('getListes', null)
@@ -2082,6 +2093,7 @@
         if (!recues || recues.erreur) return;
         localStorage.setItem(CLE_LISTES, JSON.stringify(recues));
         appliquerListes(recues);
+        afficherVersionScript(recues.versionScript);
       })
       .catch(function () { /* hors ligne ou script injoignable : le cache fait le travail */ });
   }
