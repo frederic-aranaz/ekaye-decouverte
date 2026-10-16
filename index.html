@@ -68,6 +68,18 @@
     }
     .topbar h1  { font-size: 15px; font-weight: 600; color: #e8d8b0; }
     .topbar-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+    /* Lien vers le classeur, à droite du titre — même geste que sur la page de
+       vente. Pas de `margin-left: auto` ici : c'est `.etat-reseau` qui ouvre
+       déjà la zone de droite, et deux marges automatiques se partageraient
+       l'espace libre au lieu de coller le groupe au bord. */
+    .topbar-classeur {
+      flex-shrink: 0;
+      padding: 6px 10px; border-radius: 6px;
+      font-size: 11px; font-weight: 600; text-decoration: none;
+      color: #e8d8b0; background: rgba(201,136,42,0.15);
+      border: 1px solid rgba(201,136,42,0.3);
+    }
+    .topbar-classeur:active { background: rgba(201,136,42,0.28); }
     .etat-reseau {
       margin-left: auto; font-size: 10px; font-weight: 700;
       letter-spacing: 0.04em; text-transform: uppercase;
@@ -427,8 +439,11 @@
     <div>
       <h1>Découverte EKAYE</h1>
       <div class="topbar-sub" id="sousTitre">Prise de contact</div>
+      <div class="topbar-sub" id="versionPage">Page v11</div>
     </div>
     <div class="etat-reseau en-ligne" id="etatReseau">en ligne</div>
+    <a class="topbar-classeur" href="https://docs.google.com/spreadsheets/d/1gkcXQ6iTaudY2BYY8FK2efazmJfao7V8utI1SWIyuRA/edit"
+       target="_blank" rel="noopener">Classeur</a>
   </div>
 
   <div class="msg" id="message"></div>
@@ -736,7 +751,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v10';
+  var VERSION_PAGE = 'v11';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -2085,6 +2100,11 @@
     // La version s'affiche : c'est le seul moyen, depuis le téléphone, de savoir s'il
     // sert encore l'ancienne page en cache ou celle qui vient d'être publiée.
     document.getElementById('infoVersion').textContent = 'Page ' + VERSION_PAGE + '.';
+    // La même sous le titre, visible sans ouvrir les réglages : c'est là qu'on
+    // regarde quand on se demande si le téléphone a quitté l'ancienne page.
+    // Posée depuis VERSION_PAGE et pas écrite en dur : le texte du HTML n'est
+    // qu'un repli, et il mentirait le jour où la constante change sans lui.
+    document.getElementById('versionPage').textContent = 'Page ' + VERSION_PAGE;
     majSousTitre();
 
     var enCache = null;
