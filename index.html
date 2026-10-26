@@ -133,6 +133,44 @@
     }
     textarea { min-height: 92px; resize: vertical; line-height: 1.5; }
     .fv::placeholder, textarea::placeholder { color: #6d6154; }
+
+    /* ── Éditeur du détail : titres, gras, italique, listes ──
+       La barre colle au champ : c'est un seul objet, pas deux. */
+    .editeur-outils {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      background: var(--bg-card2);
+      border: 1px solid var(--borderdiv); border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      padding: 5px;
+    }
+    .editeur-outils button {
+      min-width: 38px; height: 34px; padding: 0 9px;
+      background: transparent; color: var(--text-2);
+      border: 1px solid transparent; border-radius: 6px;
+      font: 600 14px var(--font); cursor: pointer;
+    }
+    .editeur-outils button[aria-pressed="true"] {
+      background: rgba(201,136,42,0.18); color: var(--ek-dark); border-color: rgba(201,136,42,0.35);
+    }
+    .editeur-outils .sep { width: 1px; background: var(--borderdiv); margin: 4px 2px; }
+    .editeur {
+      min-height: 140px; max-height: 60vh; overflow-y: auto;
+      background: var(--bg-card2);
+      border: 1px solid var(--borderdiv); border-radius: 0 0 8px 8px;
+      color: var(--text); font-size: 16px; font-family: var(--font); line-height: 1.5;
+      padding: 0.7rem 0.75rem;
+      overflow-wrap: anywhere;
+    }
+    .editeur:focus {
+      outline: none;
+      border-color: rgba(201,136,42,0.55);
+      box-shadow: 0 0 0 2px rgba(201,136,42,0.15);
+    }
+    .editeur:empty::before { content: attr(data-placeholder); color: #6d6154; pointer-events: none; }
+    .editeur h3, .mise-en-forme h3 { font-size: 17px; color: var(--ek-dark); margin: 0.55em 0 0.2em; line-height: 1.3; }
+    .editeur h3:first-child, .mise-en-forme h3:first-child { margin-top: 0; }
+    .editeur ul, .editeur ol, .mise-en-forme ul, .mise-en-forme ol { margin: 0.2em 0; padding-left: 1.4em; }
+    .mise-en-forme p { margin: 0; }
     .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
     .duo-cp { display: grid; grid-template-columns: 110px 1fr; gap: 0.6rem; }
 
@@ -439,7 +477,7 @@
     <div>
       <h1>Découverte EKAYE</h1>
       <div class="topbar-sub" id="sousTitre">Prise de contact</div>
-      <div class="topbar-sub" id="versionPage">Page v12</div>
+      <div class="topbar-sub" id="versionPage">Page v13</div>
     </div>
     <div class="etat-reseau en-ligne" id="etatReseau">en ligne</div>
     <a class="topbar-classeur" href="https://docs.google.com/spreadsheets/d/1gkcXQ6iTaudY2BYY8FK2efazmJfao7V8utI1SWIyuRA/edit"
@@ -500,7 +538,21 @@
 
     <div class="fb">
       <div class="fl">Détail <span class="opt">— facultatif</span></div>
-      <textarea id="demande" placeholder="Ce qu'il ou elle recherche, dimensions, délai, budget évoqué…"></textarea>
+      <!-- Le champ qui part au serveur reste le textarea caché : il reçoit le Markdown
+           réduit tiré de l'éditeur à chaque frappe. Tout ce qui lisait `demande` avant
+           continue de le lire, sans rien savoir de l'éditeur. -->
+      <div class="editeur-outils" id="demandeOutils" role="toolbar" aria-label="Mise en forme">
+        <button type="button" data-cmd="titre" aria-pressed="false" title="Titre">Titre</button>
+        <span class="sep"></span>
+        <button type="button" data-cmd="bold" aria-pressed="false" title="Gras"><b>G</b></button>
+        <button type="button" data-cmd="italic" aria-pressed="false" title="Italique"><i style="font-family:Georgia,serif">I</i></button>
+        <span class="sep"></span>
+        <button type="button" data-cmd="insertUnorderedList" aria-pressed="false" title="Liste à puces">&bull; Liste</button>
+        <button type="button" data-cmd="insertOrderedList" aria-pressed="false" title="Liste numérotée">1. Liste</button>
+      </div>
+      <div class="editeur" id="demandeEditeur" contenteditable="true" role="textbox" aria-multiline="true"
+           data-placeholder="Ce qu'il ou elle recherche, dimensions, délai, budget évoqué…"></div>
+      <textarea id="demande" hidden></textarea>
     </div>
 
     <!-- ── Bon de commande ────────────────────────────────────────────────
@@ -751,7 +803,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v12';
+  var VERSION_PAGE = 'v13';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -1200,6 +1252,239 @@
 
   /* ── Enregistrement ─────────────────────────────────────────────────────── */
 
+  /* ── Détail de la demande : l'éditeur mis en forme ──────────────────────
+     On écrit comme dans un Google Doc (titres, gras, italique, listes), et ce
+     qui part au serveur est du Markdown réduit : lisible tel quel dans le
+     classeur, rendu nativement par Trello, converti par le script pour les
+     emails. Avant le 26/10, un compte rendu aéré arrivait chez le client en un
+     seul pavé.
+
+     Grammaire ligne par ligne, la MÊME que blocsMarkdown_() côté script :
+       ## Titre · - puce · 1. puce numérotée · **gras** · *italique* · ligne vide
+     Un astérisque tapé tel quel part en « \* » pour ne pas devenir de l'italique. */
+  var editeurDemande = document.getElementById('demandeEditeur');
+  var BLOCS_HTML = /^(P|DIV|H[1-6]|UL|OL|LI|BLOCKQUOTE|SECTION|ARTICLE|HEADER|FOOTER|TABLE|TR|PRE)$/;
+  var IGNORES_HTML = /^(STYLE|SCRIPT|META|TITLE|HEAD|TEMPLATE|NOSCRIPT)$/;
+
+  function blocsMiseEnForme(texte) {
+    var blocs = [];
+    String(texte || '').replace(/\r\n?/g, '\n').split('\n').forEach(function (ligne) {
+      var dernier = blocs[blocs.length - 1];
+      var m;
+      if ((m = /^\s*#{1,6}\s+(.*)$/.exec(ligne))) {
+        blocs.push({ type: 'titre', texte: m[1].trim() });
+      } else if ((m = /^\s*[-•]\s+(.*)$/.exec(ligne)) || (m = /^\s*\*\s+(.*)$/.exec(ligne))) {
+        if (dernier && dernier.type === 'puces') dernier.items.push(m[1].trim());
+        else blocs.push({ type: 'puces', items: [m[1].trim()] });
+      } else if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(ligne))) {
+        if (dernier && dernier.type === 'numeros') dernier.items.push(m[1].trim());
+        else blocs.push({ type: 'numeros', items: [m[1].trim()] });
+      } else if (!ligne.trim()) {
+        if (dernier && dernier.type !== 'vide') blocs.push({ type: 'vide' });
+      } else if (dernier && dernier.type === 'texte') {
+        dernier.lignes.push(ligne.trim());
+      } else {
+        blocs.push({ type: 'texte', lignes: [ligne.trim()] });
+      }
+    });
+    while (blocs.length && blocs[0].type === 'vide') blocs.shift();
+    while (blocs.length && blocs[blocs.length - 1].type === 'vide') blocs.pop();
+    return blocs;
+  }
+
+  function enLigneHtml(texte) {
+    return echapper(texte)
+      .replace(/\\\*/g, '\u0001')
+      .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(?=\S)([^*]*?\S)\*/g, '<em>$1</em>')
+      .replace(/\u0001/g, '*');
+  }
+
+  // Markdown réduit → HTML : pour le constat à signer, et pour remettre dans
+  // l'éditeur ce qu'on y colle.
+  function markdownVersHtml(texte) {
+    return blocsMiseEnForme(texte).map(function (b) {
+      if (b.type === 'titre') return '<h3>' + enLigneHtml(b.texte) + '</h3>';
+      if (b.type === 'puces' || b.type === 'numeros') {
+        var balise = b.type === 'puces' ? 'ul' : 'ol';
+        return '<' + balise + '>' + b.items.map(function (x) {
+          return '<li>' + enLigneHtml(x) + '</li>';
+        }).join('') + '</' + balise + '>';
+      }
+      if (b.type === 'vide') return '<div><br></div>';
+      return b.lignes.map(function (l) { return '<div>' + enLigneHtml(l) + '</div>'; }).join('');
+    }).join('');
+  }
+
+  function estGras(el) {
+    var poids = el.style && el.style.fontWeight;
+    // Google Docs enveloppe tout un collage dans <b style="font-weight:normal">.
+    if (poids === 'normal' || poids === '400' || poids === 'lighter') return false;
+    return /^(B|STRONG)$/.test(el.tagName) || poids === 'bold' || parseInt(poids, 10) >= 600;
+  }
+
+  function estItalique(el) {
+    var style = el.style && el.style.fontStyle;
+    if (style === 'normal') return false;
+    return /^(I|EM)$/.test(el.tagName) || style === 'italic';
+  }
+
+  // Les espaces restent HORS des marques : « **mot **» ne serait pas du gras.
+  function entourer(texte, marque) {
+    return texte.split('\n').map(function (l) {
+      var m = /^(\s*)([\s\S]*?)(\s*)$/.exec(l);
+      return m[2] ? m[1] + marque + m[2] + marque + m[3] : l;
+    }).join('\n');
+  }
+
+  function enLigneMarkdown(noeud, gras, italique) {
+    if (noeud.nodeType === 3) {
+      return noeud.nodeValue.replace(/[\r\n\t]+/g, ' ').replace(/ /g, ' ').replace(/\*/g, '\\*');
+    }
+    if (noeud.nodeType !== 1 || IGNORES_HTML.test(noeud.tagName)) return '';
+    if (noeud.tagName === 'BR') return '\n';
+    var g = !gras && estGras(noeud);
+    var i = !italique && estItalique(noeud);
+    var dedans = Array.prototype.map.call(noeud.childNodes, function (n) {
+      return enLigneMarkdown(n, gras || g, italique || i);
+    }).join('');
+    if (i) dedans = entourer(dedans, '*');
+    if (g) dedans = entourer(dedans, '**');
+    return dedans;
+  }
+
+  function contientBloc(el) {
+    return !!el.querySelector('p,div,h1,h2,h3,h4,h5,h6,ul,ol,li,blockquote,table,pre');
+  }
+
+  // DOM de l'éditeur (ou d'un collage) → Markdown réduit.
+  function domVersMarkdown(racine) {
+    var lignes = [];
+    var tampon = '';
+
+    function vider() {
+      if (tampon === '') return;
+      var avecSaut = tampon.indexOf('\n') >= 0;
+      var t = tampon.replace(/\n$/, '');   // le <br> final d'un bloc n'est qu'un bouche-trou
+      tampon = '';
+      if (!/\S/.test(t)) { if (avecSaut) lignes.push(''); return; }
+      t.split('\n').forEach(function (l) { lignes.push(l.trim()); });
+    }
+
+    function liste(el) {
+      var n = 0;
+      Array.prototype.forEach.call(el.children, function (li) {
+        if (li.tagName === 'UL' || li.tagName === 'OL') { liste(li); return; }
+        var texte = Array.prototype.map.call(li.childNodes, function (c) {
+          return (c.nodeType === 1 && /^(UL|OL)$/.test(c.tagName)) ? '' : enLigneMarkdown(c, false, false);
+        }).join('').replace(/\s*\n\s*/g, ' ').trim();
+        n++;
+        if (texte) lignes.push((el.tagName === 'OL' ? n + '. ' : '- ') + texte);
+        Array.prototype.forEach.call(li.children, function (c) {
+          if (/^(UL|OL)$/.test(c.tagName)) liste(c);
+        });
+      });
+    }
+
+    function parcourir(el) {
+      Array.prototype.forEach.call(el.childNodes, function (n) {
+        if (n.nodeType === 1 && IGNORES_HTML.test(n.tagName)) return;
+        if (n.nodeType !== 1 || (!BLOCS_HTML.test(n.tagName) && !contientBloc(n))) {
+          tampon += enLigneMarkdown(n, false, false);
+          return;
+        }
+        vider();
+        if (/^H[1-6]$/.test(n.tagName)) {
+          var titre = enLigneMarkdown(n, true, false).replace(/\s*\n\s*/g, ' ').trim();
+          if (titre) lignes.push('## ' + titre);
+        } else if (n.tagName === 'UL' || n.tagName === 'OL') {
+          liste(n);
+        } else {
+          parcourir(n);
+          vider();
+        }
+      });
+    }
+
+    parcourir(racine);
+    vider();
+    return lignes.filter(function (l, k) { return l !== '' || lignes[k - 1] !== ''; })
+      .join('\n').replace(/^\n+|\n+$/g, '');
+  }
+
+  function synchroniserDemande() {
+    var md = domVersMarkdown(editeurDemande);
+    document.getElementById('demande').value = md;
+    // Un éditeur « vide » garde souvent un <br> : sans ce ménage, l'invite ne revient pas.
+    if (!md && !editeurDemande.querySelector('ul,ol,h3')) editeurDemande.innerHTML = '';
+  }
+
+  function blocCourant() {
+    var sel = window.getSelection();
+    if (!sel.rangeCount) return null;
+    var n = sel.anchorNode;
+    while (n && n !== editeurDemande) {
+      if (n.nodeType === 1 && /^(H[1-6]|LI|DIV|P)$/.test(n.tagName)) return n;
+      n = n.parentNode;
+    }
+    return null;
+  }
+
+  function majOutils() {
+    var dans = editeurDemande.contains(window.getSelection().anchorNode);
+    var bloc = dans ? blocCourant() : null;
+    Array.prototype.forEach.call(document.querySelectorAll('#demandeOutils button'), function (b) {
+      var actif = false;
+      if (dans) {
+        if (b.dataset.cmd === 'titre') actif = !!bloc && /^H[1-6]$/.test(bloc.tagName);
+        else { try { actif = document.queryCommandState(b.dataset.cmd); } catch (e) {} }
+      }
+      b.setAttribute('aria-pressed', actif ? 'true' : 'false');
+    });
+  }
+
+  try { document.execCommand('defaultParagraphSeparator', false, 'div'); } catch (e) {}
+
+  // mousedown empêché : sans cela, toucher un bouton retire le focus de l'éditeur
+  // et la sélection est perdue avant que la commande ne s'applique.
+  document.getElementById('demandeOutils').addEventListener('mousedown', function (e) { e.preventDefault(); });
+  document.getElementById('demandeOutils').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (!editeurDemande.contains(window.getSelection().anchorNode)) editeurDemande.focus();
+    var cmd = b.dataset.cmd;
+    if (cmd === 'titre') {
+      var bloc = blocCourant();
+      var dejaTitre = bloc && /^H[1-6]$/.test(bloc.tagName);
+      // Dans une liste, un titre n'a pas de sens : on sort d'abord de la liste.
+      if (!dejaTitre && bloc && bloc.tagName === 'LI') {
+        document.execCommand(bloc.parentNode.tagName === 'OL' ? 'insertOrderedList' : 'insertUnorderedList');
+      }
+      document.execCommand('formatBlock', false, dejaTitre ? '<div>' : '<h3>');
+    } else {
+      document.execCommand(cmd, false, null);
+    }
+    synchroniserDemande();
+    majOutils();
+  });
+
+  editeurDemande.addEventListener('input', synchroniserDemande);
+  document.addEventListener('selectionchange', majOutils);
+
+  // Un collage (Google Docs, Notes, un email) passe par la même grammaire : on
+  // garde titres, gras, italique et listes, et on laisse polices, couleurs et tailles.
+  editeurDemande.addEventListener('paste', function (e) {
+    var cd = e.clipboardData;
+    if (!cd) return;
+    e.preventDefault();
+    var html = cd.getData('text/html');
+    var md = html
+      ? domVersMarkdown(new DOMParser().parseFromString(html, 'text/html').body)
+      : cd.getData('text/plain');
+    document.execCommand('insertHTML', false, markdownVersHtml(md));
+    synchroniserDemande();
+  });
+
   function valeur(id) { return document.getElementById(id).value.trim(); }
 
   function enregistrer() {
@@ -1477,6 +1762,7 @@
   function viderFormulaire() {
     ['nom', 'prenom', 'telephone', 'email', 'adresse', 'codePostal', 'ville', 'demande', 'precision']
       .forEach(function (id) { document.getElementById(id).value = ''; });
+    editeurDemande.innerHTML = '';
     document.getElementById('accordRecontact').checked = false;
     document.getElementById('blocRgpd').classList.remove('on');
     // Les listes de communes du visiteur précédent n'ont rien à faire devant le suivant.
@@ -1791,7 +2077,7 @@
     var morceaux = [
       '<strong>' + echapper(quoi) + '</strong> — ' + echapper(lieu),
       qui ? 'Pour ' + echapper(qui) : null,
-      valeur('demande') ? echapper(valeur('demande')) : null,
+      valeur('demande') ? '<div class="mise-en-forme">' + markdownVersHtml(valeur('demande')) + '</div>' : null,
       argent,
       photos.length ? photos.length + ' photo(s) jointe(s) au constat' : 'Aucune photo'
     ].filter(Boolean);
