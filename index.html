@@ -683,6 +683,14 @@
       </div>
     </div>
 
+    <!-- Un <select> ici, contre la règle des pastilles : deux cents pays ne tiennent pas
+         en pastilles, et la valeur par défaut — France — sert neuf fois sur dix sans
+         qu'on y touche. Taper une ville étrangère (« Zurich ») le règle tout seul. -->
+    <div class="fb">
+      <div class="fl">Pays</div>
+      <select class="fv" id="pays" autocomplete="country-name"></select>
+    </div>
+
     <div class="aide" style="margin-top:0.75rem">
       Au minimum un nom ou un moyen de rappel (téléphone ou email).
     </div>
@@ -833,7 +841,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v14';
+  var VERSION_PAGE = 'v15';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -1630,6 +1638,7 @@
       adresse: valeur('adresse'),
       codePostal: valeur('codePostal'),
       ville: valeur('ville'),
+      pays: valeur('pays') || PAYS_PAR_DEFAUT,
       demande: valeur('demande'),
       // Assemblé ici, et pas sur le serveur : le téléphone connaît son fuseau, le
       // serveur ne verrait qu'une chaîne sans origine. `new Date(jour + 'T' + heure)`
@@ -1846,6 +1855,8 @@
   function viderFormulaire() {
     ['nom', 'prenom', 'telephone', 'email', 'adresse', 'codePostal', 'ville', 'demande', 'precision']
       .forEach(function (id) { document.getElementById(id).value = ''; });
+    // Le pays est personnel lui aussi : le visiteur suivant repart de la France.
+    choisirPays(PAYS_PAR_DEFAUT);
     editeurDemande.innerHTML = '';
     document.getElementById('accordRecontact').checked = false;
     document.getElementById('blocRgpd').classList.remove('on');
@@ -2246,7 +2257,8 @@
   // une ville déjà tapée à la main. Plusieurs communes partagent le code : on liste.
   function chercherVillesParCodePostal() {
     var cp = document.getElementById('codePostal').value.trim();
-    if (!/^[0-9]{5}$/.test(cp)) {
+    // Un code postal français ne dit rien d'une adresse à l'étranger.
+    if (!enFrance() || !/^[0-9]{5}$/.test(cp)) {
       masquerSuggestionsVille();
       codePostalRecherche = '';
       return;
@@ -2276,8 +2288,137 @@
       .catch(function () { /* API injoignable : saisie manuelle, rien de bloquant */ });
   }
 
+  /* ── Pays ────────────────────────────────────────────────────────────────
+     Liste ÉCRITE dans la page, et pas demandée à une API : la page doit s'ouvrir
+     et s'envoyer hors ligne. Noms français tirés des codes ISO 3166, triés à la
+     française ; le code ne sert qu'à reconnaître un pays venu d'ailleurs (le carnet
+     Google, la recherche de villes à l'étranger), c'est le NOM qui part au classeur. */
+  var PAYS_PAR_DEFAUT = 'France';
+  var PAYS = [
+    ['AF', 'Afghanistan'], ['ZA', 'Afrique du Sud'], ['AL', 'Albanie'], ['DZ', 'Algérie'],
+    ['DE', 'Allemagne'], ['AD', 'Andorre'], ['AO', 'Angola'], ['AI', 'Anguilla'],
+    ['AG', 'Antigua-et-Barbuda'], ['SA', 'Arabie saoudite'], ['AR', 'Argentine'],
+    ['AM', 'Arménie'], ['AW', 'Aruba'], ['AU', 'Australie'], ['AT', 'Autriche'],
+    ['AZ', 'Azerbaïdjan'], ['BS', 'Bahamas'], ['BH', 'Bahreïn'], ['BD', 'Bangladesh'],
+    ['BB', 'Barbade'], ['BE', 'Belgique'], ['BZ', 'Belize'], ['BJ', 'Bénin'],
+    ['BM', 'Bermudes'], ['BT', 'Bhoutan'], ['BY', 'Biélorussie'], ['BO', 'Bolivie'],
+    ['BA', 'Bosnie-Herzégovine'], ['BW', 'Botswana'], ['BR', 'Brésil'], ['BN', 'Brunei'],
+    ['BG', 'Bulgarie'], ['BF', 'Burkina Faso'], ['BI', 'Burundi'], ['KH', 'Cambodge'],
+    ['CM', 'Cameroun'], ['CA', 'Canada'], ['CV', 'Cap-Vert'], ['CL', 'Chili'],
+    ['CN', 'Chine'], ['CY', 'Chypre'], ['CO', 'Colombie'], ['KM', 'Comores'],
+    ['CG', 'Congo-Brazzaville'], ['CD', 'Congo-Kinshasa'], ['KP', 'Corée du Nord'],
+    ['KR', 'Corée du Sud'], ['CR', 'Costa Rica'], ['CI', 'Côte d’Ivoire'],
+    ['HR', 'Croatie'], ['CU', 'Cuba'], ['CW', 'Curaçao'], ['DK', 'Danemark'],
+    ['DJ', 'Djibouti'], ['DM', 'Dominique'], ['EG', 'Égypte'],
+    ['AE', 'Émirats arabes unis'], ['EC', 'Équateur'], ['ER', 'Érythrée'],
+    ['ES', 'Espagne'], ['EE', 'Estonie'], ['SZ', 'Eswatini'], ['US', 'États-Unis'],
+    ['ET', 'Éthiopie'], ['FJ', 'Fidji'], ['FI', 'Finlande'], ['FR', 'France'],
+    ['GA', 'Gabon'], ['GM', 'Gambie'], ['GE', 'Géorgie'], ['GH', 'Ghana'],
+    ['GI', 'Gibraltar'], ['GR', 'Grèce'], ['GD', 'Grenade'], ['GL', 'Groenland'],
+    ['GP', 'Guadeloupe'], ['GU', 'Guam'], ['GT', 'Guatemala'], ['GG', 'Guernesey'],
+    ['GN', 'Guinée'], ['GQ', 'Guinée équatoriale'], ['GW', 'Guinée-Bissau'],
+    ['GY', 'Guyana'], ['GF', 'Guyane française'], ['HT', 'Haïti'], ['HN', 'Honduras'],
+    ['HK', 'Hong Kong'], ['HU', 'Hongrie'], ['IM', 'Île de Man'], ['AX', 'Îles Åland'],
+    ['KY', 'Îles Caïmans'], ['CK', 'Îles Cook'], ['FO', 'Îles Féroé'],
+    ['FK', 'Îles Malouines'], ['MP', 'Îles Mariannes du Nord'], ['MH', 'Îles Marshall'],
+    ['SB', 'Îles Salomon'], ['TC', 'Îles Turques-et-Caïques'],
+    ['VG', 'Îles Vierges britanniques'], ['VI', 'Îles Vierges des États-Unis'],
+    ['IN', 'Inde'], ['ID', 'Indonésie'], ['IQ', 'Irak'], ['IR', 'Iran'], ['IE', 'Irlande'],
+    ['IS', 'Islande'], ['IL', 'Israël'], ['IT', 'Italie'], ['JM', 'Jamaïque'],
+    ['JP', 'Japon'], ['JE', 'Jersey'], ['JO', 'Jordanie'], ['KZ', 'Kazakhstan'],
+    ['KE', 'Kenya'], ['KG', 'Kirghizstan'], ['KI', 'Kiribati'], ['KW', 'Koweït'],
+    ['RE', 'La Réunion'], ['LA', 'Laos'], ['LS', 'Lesotho'], ['LV', 'Lettonie'],
+    ['LB', 'Liban'], ['LR', 'Liberia'], ['LY', 'Libye'], ['LI', 'Liechtenstein'],
+    ['LT', 'Lituanie'], ['LU', 'Luxembourg'], ['MO', 'Macao'], ['MK', 'Macédoine du Nord'],
+    ['MG', 'Madagascar'], ['MY', 'Malaisie'], ['MW', 'Malawi'], ['MV', 'Maldives'],
+    ['ML', 'Mali'], ['MT', 'Malte'], ['MA', 'Maroc'], ['MQ', 'Martinique'],
+    ['MU', 'Maurice'], ['MR', 'Mauritanie'], ['YT', 'Mayotte'], ['MX', 'Mexique'],
+    ['FM', 'Micronésie'], ['MD', 'Moldavie'], ['MC', 'Monaco'], ['MN', 'Mongolie'],
+    ['ME', 'Monténégro'], ['MS', 'Montserrat'], ['MZ', 'Mozambique'],
+    ['MM', 'Myanmar (Birmanie)'], ['NA', 'Namibie'], ['NR', 'Nauru'], ['NP', 'Népal'],
+    ['NI', 'Nicaragua'], ['NE', 'Niger'], ['NG', 'Nigeria'], ['NU', 'Niue'],
+    ['NO', 'Norvège'], ['NC', 'Nouvelle-Calédonie'], ['NZ', 'Nouvelle-Zélande'],
+    ['OM', 'Oman'], ['UG', 'Ouganda'], ['UZ', 'Ouzbékistan'], ['PK', 'Pakistan'],
+    ['PW', 'Palaos'], ['PA', 'Panama'], ['PG', 'Papouasie-Nouvelle-Guinée'],
+    ['PY', 'Paraguay'], ['NL', 'Pays-Bas'], ['BQ', 'Pays-Bas caribéens'], ['PE', 'Pérou'],
+    ['PH', 'Philippines'], ['PL', 'Pologne'], ['PF', 'Polynésie française'],
+    ['PR', 'Porto Rico'], ['PT', 'Portugal'], ['QA', 'Qatar'],
+    ['CF', 'République centrafricaine'], ['DO', 'République dominicaine'],
+    ['RO', 'Roumanie'], ['GB', 'Royaume-Uni'], ['RU', 'Russie'], ['RW', 'Rwanda'],
+    ['EH', 'Sahara occidental'], ['BL', 'Saint-Barthélemy'],
+    ['KN', 'Saint-Christophe-et-Niévès'], ['SM', 'Saint-Marin'], ['MF', 'Saint-Martin'],
+    ['SX', 'Saint-Martin (partie néerlandaise)'], ['PM', 'Saint-Pierre-et-Miquelon'],
+    ['VC', 'Saint-Vincent-et-les Grenadines'], ['SH', 'Sainte-Hélène'],
+    ['LC', 'Sainte-Lucie'], ['SV', 'Salvador'], ['WS', 'Samoa'],
+    ['AS', 'Samoa américaines'], ['ST', 'Sao Tomé-et-Principe'], ['SN', 'Sénégal'],
+    ['RS', 'Serbie'], ['SC', 'Seychelles'], ['SL', 'Sierra Leone'], ['SG', 'Singapour'],
+    ['SK', 'Slovaquie'], ['SI', 'Slovénie'], ['SO', 'Somalie'], ['SD', 'Soudan'],
+    ['SS', 'Soudan du Sud'], ['LK', 'Sri Lanka'], ['SE', 'Suède'], ['CH', 'Suisse'],
+    ['SR', 'Suriname'], ['SY', 'Syrie'], ['TJ', 'Tadjikistan'], ['TW', 'Taïwan'],
+    ['TZ', 'Tanzanie'], ['TD', 'Tchad'], ['CZ', 'Tchéquie'],
+    ['PS', 'Territoires palestiniens'], ['TH', 'Thaïlande'], ['TL', 'Timor oriental'],
+    ['TG', 'Togo'], ['TK', 'Tokelau'], ['TO', 'Tonga'], ['TT', 'Trinité-et-Tobago'],
+    ['TN', 'Tunisie'], ['TM', 'Turkménistan'], ['TR', 'Turquie'], ['TV', 'Tuvalu'],
+    ['UA', 'Ukraine'], ['UY', 'Uruguay'], ['VU', 'Vanuatu'], ['VA', 'Vatican'],
+    ['VE', 'Venezuela'], ['VN', 'Viêt Nam'], ['WF', 'Wallis-et-Futuna'], ['YE', 'Yémen'],
+    ['ZM', 'Zambie'], ['ZW', 'Zimbabwe']
+  ];
+  var NOM_PAYS_PAR_CODE = {};
+  PAYS.forEach(function (p) { NOM_PAYS_PAR_CODE[p[0]] = p[1]; });
+
+  // Retrouve le nom de la liste depuis un code ISO, ou depuis un nom tapé ailleurs
+  // (« suisse », « Suisse »). Rien de reconnu : chaîne vide — on ne devine pas.
+  function paysDeLaListe(code, nom) {
+    var c = String(code || '').trim().toUpperCase();
+    if (NOM_PAYS_PAR_CODE[c]) return NOM_PAYS_PAR_CODE[c];
+    var n = String(nom || '').trim().toLowerCase();
+    if (!n) return '';
+    for (var i = 0; i < PAYS.length; i++) {
+      if (PAYS[i][1].toLowerCase() === n) return PAYS[i][1];
+    }
+    return '';
+  }
+
+  // France en tête, puis un séparateur, puis tous les autres — France comprise une
+  // seconde fois serait un doublon dans une liste qu'on fait défiler au doigt.
+  (function remplirListePays() {
+    var select = document.getElementById('pays');
+    var html = '<option value="' + PAYS_PAR_DEFAUT + '">' + PAYS_PAR_DEFAUT + '</option>' +
+      '<option disabled>──────────</option>';
+    PAYS.forEach(function (p) {
+      if (p[1] === PAYS_PAR_DEFAUT) return;
+      html += '<option value="' + echapper(p[1]) + '">' + echapper(p[1]) + '</option>';
+    });
+    select.innerHTML = html;
+    select.value = PAYS_PAR_DEFAUT;
+  })();
+
+  function enFrance() { return valeur('pays') === PAYS_PAR_DEFAUT; }
+
+  // Hors de France, un code postal n'est pas forcément fait de chiffres (« SW1A 1AA ») :
+  // le clavier numérique n'aurait pas les lettres, et l'exemple 24100 tromperait.
+  function majChampCodePostal() {
+    var cp = document.getElementById('codePostal');
+    cp.setAttribute('inputmode', enFrance() ? 'numeric' : 'text');
+    cp.placeholder = enFrance() ? '24100' : '';
+  }
+
+  function choisirPays(nom) {
+    document.getElementById('pays').value = nom;
+    majChampCodePostal();
+  }
+
+  document.getElementById('pays').addEventListener('change', function () {
+    // Les communes françaises proposées n'ont plus rien à faire là.
+    masquerSuggestionsVille();
+    codePostalRecherche = '';
+    communeRecherche = '';
+    majChampCodePostal();
+  });
+
   var communeRecherche = '';
   var communeRechercheTimer = null;
+  var villesEtrangeresProposees = [];
 
   function masquerSuggestionsCommune() {
     var box = document.getElementById('communeSuggestions');
@@ -2291,12 +2432,74 @@
       var champCp = document.getElementById('codePostal');
       if (!champCp.value.trim()) champCp.value = codePostal;
     }
+    // Une commune de geo.api.gouv.fr est française par définition.
+    choisirPays(PAYS_PAR_DEFAUT);
     masquerSuggestionsCommune();
   }
 
-  // Ville → code postal. Recherche floue, débattue de 300 ms parce que l'utilisateur
-  // tape lettre par lettre. Le code postal n'est rempli que si la commune n'en a
-  // qu'un : Paris, Lyon et Marseille en ont plusieurs, on ne devine pas à leur place.
+  // Une ville trouvée hors de France : elle règle le pays. C'est tout l'intérêt —
+  // taper « Zurich » et voir la Suisse se poser sans ouvrir la liste.
+  function choisirVilleEtrangere(i) {
+    var v = villesEtrangeresProposees[i];
+    if (!v) return;
+    document.getElementById('ville').value = v.nom;
+    if (v.pays) choisirPays(v.pays);
+    if (v.codePostal) {
+      var champCp = document.getElementById('codePostal');
+      if (!champCp.value.trim()) champCp.value = v.codePostal;
+    }
+    masquerSuggestionsCommune();
+  }
+
+  // Communes françaises : geo.api.gouv.fr, comme avant. Jamais d'exception : une API
+  // injoignable rend une liste vide, et l'autre source peut encore répondre.
+  // Interrogée MÊME quand un autre pays est choisi : le pays resté sur la Suisse d'un
+  // visiteur précédent ne doit pas faire proposer Livourne à qui tape « Libourne ».
+  function communesFrancaises(nom) {
+    return fetch('https://geo.api.gouv.fr/communes?nom=' + encodeURIComponent(nom) +
+                 '&fields=nom,codesPostaux&boost=population&limit=8')
+      .then(function (r) { return r.json(); })
+      .then(function (communes) { return Array.isArray(communes) ? communes : []; })
+      .catch(function () { return []; });
+  }
+
+  // Villes du monde : Photon (OpenStreetMap), sans clé, fait pour la saisie lettre à
+  // lettre. Les résultats français sont écartés — geo.api.gouv.fr les connaît mieux,
+  // codes postaux compris. Seul le nom de la ville part, jamais rien sur la personne.
+  function villesEtrangeres(nom) {
+    if (nom.length < 3) return Promise.resolve([]);
+    return fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(nom) +
+                 '&lang=fr&layer=city&limit=10')
+      .then(function (r) { return r.json(); })
+      .then(function (reponse) {
+        var vues = {};
+        return ((reponse && reponse.features) || [])
+          .map(function (f) { return f.properties || {}; })
+          .filter(function (p) {
+            var code = String(p.countrycode || '').toUpperCase();
+            if (!p.name || !code || code === 'FR') return false;
+            var cle = p.name.toLowerCase() + '|' + code;
+            if (vues[cle]) return false;
+            vues[cle] = true;
+            return true;
+          })
+          .map(function (p) {
+            var code = String(p.countrycode).toUpperCase();
+            return {
+              nom: p.name,
+              pays: NOM_PAYS_PAR_CODE[code] || '',
+              codePostal: /^[A-Za-z0-9 -]{2,10}$/.test(String(p.postcode || '')) ? p.postcode : '',
+              region: String(p.state || '').trim()
+            };
+          });
+      })
+      .catch(function () { return []; });
+  }
+
+  // Ville → code postal, et désormais ville → pays. Recherche floue, débattue de
+  // 300 ms parce que l'utilisateur tape lettre par lettre. En France : les communes
+  // d'abord, puis au plus trois villes étrangères — « Zurich » n'a pas de commune
+  // homonyme, la Suisse vient donc en tête. Ailleurs : les villes du pays choisi d'abord.
   function chercherCommunesParNom() {
     var nom = document.getElementById('ville').value.trim();
     clearTimeout(communeRechercheTimer);
@@ -2308,30 +2511,46 @@
     communeRechercheTimer = setTimeout(function () {
       if (nom === communeRecherche) return;
       communeRecherche = nom;
-      fetch('https://geo.api.gouv.fr/communes?nom=' + encodeURIComponent(nom) +
-            '&fields=nom,codesPostaux&boost=population&limit=8')
-        .then(function (r) { return r.json(); })
-        .then(function (communes) {
-          // La saisie a continué pendant l'appel : cette réponse est périmée.
-          if (document.getElementById('ville').value.trim() !== nom) return;
-          if (!Array.isArray(communes) || communes.length === 0) {
-            masquerSuggestionsCommune();
-            return;
-          }
-          var box = document.getElementById('communeSuggestions');
-          box.innerHTML = communes.map(function (c) {
-            var cps = c.codesPostaux || [];
-            var cpUnique = cps.length === 1 ? cps[0] : '';
-            var nomEchappe = c.nom.replace(/'/g, "\\'");
-            var suffixe = cps.length
-              ? ' <span style="color:var(--text-3);font-size:12px">(' + cps.join(', ') + ')</span>'
-              : '';
-            return '<button type="button" onclick="choisirCommune(\'' + nomEchappe + '\', \'' +
-              cpUnique + '\')">' + echapper(c.nom) + suffixe + '</button>';
+      Promise.all([communesFrancaises(nom), villesEtrangeres(nom)]).then(function (r) {
+        // La saisie a continué pendant l'appel : cette réponse est périmée.
+        if (document.getElementById('ville').value.trim() !== nom) return;
+        var communes = r[0];
+        var etrangeres = r[1];
+        var paysChoisi = valeur('pays');
+        // Ordre : en France, les communes (8 au plus) puis 3 villes étrangères. Pays
+        // étranger choisi : ses villes d'abord, puis 3 communes françaises, puis le reste.
+        var duPays = enFrance() ? [] : etrangeres.filter(function (v) { return v.pays === paysChoisi; });
+        var autres = etrangeres.filter(function (v) { return duPays.indexOf(v) === -1; });
+        if (!enFrance()) communes = communes.slice(0, 3);
+        autres = autres.slice(0, enFrance() ? 3 : Math.max(3, 6 - duPays.length));
+        villesEtrangeresProposees = duPays.concat(autres);
+        if (communes.length === 0 && villesEtrangeresProposees.length === 0) {
+          masquerSuggestionsCommune();
+          return;
+        }
+        var discret = ' <span style="color:var(--text-3);font-size:12px">';
+        function boutonsEtrangers(liste, decalage) {
+          return liste.map(function (v, i) {
+            var detail = [v.region, v.pays].filter(Boolean).join(', ');
+            return '<button type="button" onclick="choisirVilleEtrangere(' + (decalage + i) + ')">' +
+              echapper(v.nom) + (detail ? discret + '· ' + echapper(detail) + '</span>' : '') +
+              '</button>';
           }).join('');
-          box.classList.add('visible');
-        })
-        .catch(function () { /* API injoignable : saisie manuelle, rien de bloquant */ });
+        }
+        var html = boutonsEtrangers(duPays, 0) + communes.map(function (c) {
+          var cps = c.codesPostaux || [];
+          var cpUnique = cps.length === 1 ? cps[0] : '';
+          var nomEchappe = c.nom.replace(/'/g, "\\'");
+          var suffixe = cps.length ? discret + '(' + cps.join(', ') + ')</span>' : '';
+          // Hors de France, une commune dit qu'elle est française : choisir la tapera.
+          if (!enFrance()) suffixe += discret + '· France</span>';
+          return '<button type="button" onclick="choisirCommune(\'' + nomEchappe + '\', \'' +
+            cpUnique + '\')">' + echapper(c.nom) + suffixe + '</button>';
+        }).join('') + boutonsEtrangers(autres, duPays.length);
+        var box = document.getElementById('communeSuggestions');
+        box.innerHTML = html;
+        box.classList.add('visible');
+      });
     }, 300);
   }
 
@@ -2410,6 +2629,10 @@
       var champ = document.getElementById(id);
       if (c[id] && !champ.value.trim()) champ.value = c[id];
     });
+    // Le pays n'est jamais vide (France par défaut) : il ne prend celui du contact que
+    // s'il est resté sur la France, et que le carnet en connaît un de la liste.
+    var paysContact = paysDeLaListe(c.paysCode, c.pays);
+    if (paysContact && valeur('pays') === PAYS_PAR_DEFAUT) choisirPays(paysContact);
     masquerSuggestionsContact();
   }
 
