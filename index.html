@@ -179,6 +179,10 @@
        options tant qu'il est fermé. Sur un stand, avec un visiteur qui attend,
        les pastilles se tapent en un geste et se lisent sans les ouvrir. */
     .pills { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    /* Jour et heure côte à côte : sur un téléphone, deux champs empilés pour une seule
+       information se lisent comme deux questions. */
+    .rdv-ligne { display: flex; gap: 0.45rem; }
+    .rdv-ligne .fv { flex: 1 1 0; min-width: 0; }
     .pill {
       flex: 1 1 auto;
       min-height: 44px;               /* cible tactile confortable */
@@ -503,8 +507,9 @@
     </div>
 
     <div class="fb">
-      <div class="fl">Lieu <span class="oblig">*</span></div>
+      <div class="fl">Lieu ou canal <span class="oblig">*</span></div>
       <div class="pills" id="pillsLieu"></div>
+      <div class="aide">Où la rencontre a eu lieu, ou par quel moyen la personne nous a joints.</div>
     </div>
 
     <div class="fb" id="blocExpo" style="display:none">
@@ -519,6 +524,31 @@
       <div class="fl">Date du contact</div>
       <input type="date" class="fv" id="dateContact">
       <div class="aide">Le jour de la rencontre, même si la fiche part plus tard.</div>
+    </div>
+
+    <!-- Rendez-vous pris sur-le-champ. Entièrement facultatif : tant que la date reste
+         vide, rien ne change et la carte Trello part sans échéance, comme avant.
+         Dès qu'une date ET une heure sont posées, elles deviennent l'échéance de la
+         carte — et la synchro en fait un événement dans « A- EKAYE » au prochain quart
+         d'heure. On ne parle jamais à l'agenda d'ici. -->
+    <div class="fb">
+      <div class="fl">Rendez-vous pris <span class="opt">— facultatif</span></div>
+      <div class="rdv-ligne">
+        <input type="date" class="fv" id="rdvJour" aria-label="Jour du rendez-vous">
+        <input type="time" class="fv" id="rdvHeure" step="300" aria-label="Heure du rendez-vous">
+      </div>
+      <div class="aide">Laisser vide s'il n'y a pas de rendez-vous. Durée : 1 h.</div>
+    </div>
+
+    <div class="fb" id="blocRdvOu" style="display:none">
+      <div class="fl">Le rendez-vous se tient</div>
+      <div class="pills" id="pillsRdvLieu"></div>
+    </div>
+
+    <div class="fb" id="blocRdvAdresse" style="display:none">
+      <div class="fl">Adresse du rendez-vous <span class="oblig">*</span></div>
+      <input type="text" class="fv" id="rdvAdresse" placeholder="Où faut-il se rendre ?">
+      <div class="aide">C'est ce qui part dans le lieu de l'événement, pour se faire guider.</div>
     </div>
   </div>
 
@@ -803,7 +833,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v13';
+  var VERSION_PAGE = 'v14';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -816,7 +846,9 @@
   // le script. Ces listes font AUTORITÉ côté serveur, pas ici : une valeur qui aurait
   // divergé serait refusée à l'envoi avec un message explicite, jamais écrite de travers.
   var LISTES_REPLI = {
-    lieux: ['Atelier', 'Expo', 'Boutique LAM'],
+    lieux: ['Atelier', 'Expo', 'Boutique LAM',
+      'Téléphone', 'Email', 'SMS', 'WhatsApp', 'Chat Brevo'],
+    lieuxRdv: ['Chez le client', 'Atelier', 'Autre adresse'],
     thematiques: ['Création', 'Réparation', 'Demande de RDV atelier', 'Atelier', 'Vente', 'Autre'],
     saisisseurs: ['Frédéric', 'Manuela'],
     // Repris du registre de vente, plus le virement : voir MODES_PAIEMENT côté script.
@@ -830,7 +862,12 @@
   var REGLEMENTS = ['Acompte', 'Réglé en totalité', 'Rien versé'];
 
   var listes = LISTES_REPLI;
-  var choix = { saisiPar: '', lieu: '', thematique: '', reglement: '', modePaiement: '' };
+  var choix = { saisiPar: '', lieu: '', thematique: '', reglement: '', modePaiement: '',
+    rdvLieu: '' };
+
+  // Les canaux à distance : la personne n'est pas venue, donc un rendez-vous pris sur
+  // une telle fiche se tient par défaut chez elle. Même liste que côté script.
+  var LIEUX_A_DISTANCE = ['Téléphone', 'Email', 'SMS', 'WhatsApp', 'Chat Brevo'];
 
   function urlApi() { return localStorage.getItem(CLE_URL) || URL_API_DEFAUT; }
 
@@ -1219,11 +1256,50 @@
     construirePastilles('pillsThematique', listes.thematiques, 'thematique', function (valeur) {
       document.getElementById('blocPrecision').style.display = (valeur === 'Autre') ? 'block' : 'none';
     });
+    construirePastilles('pillsRdvLieu', listes.lieuxRdv || LISTES_REPLI.lieuxRdv, 'rdvLieu', majBlocsRdv);
+
+    // Le jour seul ne suffit pas à ouvrir les sous-blocs : c'est l'heure qui fait le
+    // rendez-vous. Les deux champs les surveillent donc tous les deux.
+    document.getElementById('rdvJour').addEventListener('change', majBlocsRdv);
+    document.getElementById('rdvHeure').addEventListener('change', majBlocsRdv);
 
     var datalist = document.getElementById('listeExpos');
     datalist.innerHTML = listes.expos.map(function (nom) {
       return '<option value="' + echapper(nom) + '">';
     }).join('');
+  }
+
+  /* Pose la marque sur une pastille comme si on l'avait touchée. Sert au défaut
+     proposé pour le lieu du rendez-vous : la valeur est posée dans « choix », et l'œil
+     doit la voir aussi, sans quoi on croit n'avoir rien choisi. */
+  function marquerPastille(conteneurId, valeur) {
+    var conteneur = document.getElementById(conteneurId);
+    if (!conteneur) return;
+    Array.prototype.forEach.call(conteneur.children, function (b) {
+      b.classList.toggle('on', b.textContent === valeur);
+    });
+  }
+
+  /* Un rendez-vous n'existe que si le jour ET l'heure sont posés : une date sans heure
+     donnerait un événement d'une heure à minuit, ce qui ne veut rien dire. Tant qu'il
+     n'existe pas, les sous-blocs restent fermés et rien ne part au serveur. */
+  function rdvComplet() {
+    return !!valeur('rdvJour') && !!valeur('rdvHeure');
+  }
+
+  function majBlocsRdv() {
+    var actif = rdvComplet();
+    document.getElementById('blocRdvOu').style.display = actif ? 'block' : 'none';
+
+    // Un défaut proposé, jamais imposé : à distance on va chez le client, sinon on le
+    // reçoit. Posé seulement si Frédéric n'a rien choisi lui-même.
+    if (actif && !choix.rdvLieu) {
+      choix.rdvLieu = (LIEUX_A_DISTANCE.indexOf(choix.lieu) === -1) ? 'Atelier' : 'Chez le client';
+      marquerPastille('pillsRdvLieu', choix.rdvLieu);
+    }
+
+    document.getElementById('blocRdvAdresse').style.display =
+      (actif && choix.rdvLieu === 'Autre adresse') ? 'block' : 'none';
   }
 
   /* ── Contexte de journée ────────────────────────────────────────────────
@@ -1555,6 +1631,14 @@
       codePostal: valeur('codePostal'),
       ville: valeur('ville'),
       demande: valeur('demande'),
+      // Assemblé ici, et pas sur le serveur : le téléphone connaît son fuseau, le
+      // serveur ne verrait qu'une chaîne sans origine. `new Date(jour + 'T' + heure)`
+      // est lu dans le fuseau local, ce qui est exactement ce qu'on veut.
+      rdvDate: rdvComplet()
+        ? new Date(valeur('rdvJour') + 'T' + valeur('rdvHeure')).toISOString()
+        : '',
+      rdvLieu: rdvComplet() ? choix.rdvLieu : '',
+      rdvAdresse: rdvComplet() ? valeur('rdvAdresse') : '',
       accordRecontact: accord,
       photos: photosPourEnvoi(),
       signature: signaturePourEnvoi(),
