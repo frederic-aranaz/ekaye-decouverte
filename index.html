@@ -841,7 +841,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v15';
+  var VERSION_PAGE = 'v16';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -854,7 +854,7 @@
   // le script. Ces listes font AUTORITÉ côté serveur, pas ici : une valeur qui aurait
   // divergé serait refusée à l'envoi avec un message explicite, jamais écrite de travers.
   var LISTES_REPLI = {
-    lieux: ['Atelier', 'Expo', 'Boutique LAM',
+    lieux: ['Atelier', 'Expo', 'Boutique LAM', 'Chez le client',
       'Téléphone', 'Email', 'SMS', 'WhatsApp', 'Chat Brevo'],
     lieuxRdv: ['Chez le client', 'Atelier', 'Autre adresse'],
     thematiques: ['Création', 'Réparation', 'Demande de RDV atelier', 'Atelier', 'Vente', 'Autre'],
@@ -1299,10 +1299,11 @@
     var actif = rdvComplet();
     document.getElementById('blocRdvOu').style.display = actif ? 'block' : 'none';
 
-    // Un défaut proposé, jamais imposé : à distance on va chez le client, sinon on le
-    // reçoit. Posé seulement si Frédéric n'a rien choisi lui-même.
+    // Un défaut proposé, jamais imposé : à distance ou déjà chez lui, on va chez le
+    // client ; sinon on le reçoit. Posé seulement si Frédéric n'a rien choisi lui-même.
     if (actif && !choix.rdvLieu) {
-      choix.rdvLieu = (LIEUX_A_DISTANCE.indexOf(choix.lieu) === -1) ? 'Atelier' : 'Chez le client';
+      choix.rdvLieu = (LIEUX_A_DISTANCE.indexOf(choix.lieu) === -1 && choix.lieu !== 'Chez le client')
+        ? 'Atelier' : 'Chez le client';
       marquerPastille('pillsRdvLieu', choix.rdvLieu);
     }
 
