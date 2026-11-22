@@ -841,7 +841,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v16';
+  var VERSION_PAGE = 'v17';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -857,7 +857,8 @@
     lieux: ['Atelier', 'Expo', 'Boutique LAM', 'Chez le client',
       'Téléphone', 'Email', 'SMS', 'WhatsApp', 'Chat Brevo'],
     lieuxRdv: ['Chez le client', 'Atelier', 'Autre adresse'],
-    thematiques: ['Création', 'Réparation', 'Demande de RDV atelier', 'Atelier', 'Vente', 'Autre'],
+    thematiques: ['Création', 'Réparation', 'Demande de RDV atelier', 'Atelier', 'Vente',
+      'Livraison', 'Installation', 'Autre'],
     saisisseurs: ['Frédéric', 'Manuela'],
     // Repris du registre de vente, plus le virement : voir MODES_PAIEMENT côté script.
     modesPaiement: ['CB', 'Espèces', 'Chèque', 'Virement', 'Stripe', 'PayPal'],
@@ -1222,6 +1223,45 @@
     }
   }
 
+  /* ── Thématiques : plusieurs tuiles à la fois (v17, 22/11/2026) ──────────
+     Une vente livrée et posée, c'est « Vente », « Livraison » et « Installation ».
+     Un toucher allume la tuile, un second l'éteint. `choix.thematique` reste une
+     CHAÎNE (« Vente, Livraison ») rangée dans l'ordre de la liste : tout ce qui
+     vérifiait « une thématique est-elle choisie ? » marche sans changement, et une
+     fiche restée en file d'attente part sous la même forme que les autres. */
+  var SEPARATEUR_THEMATIQUES = ', ';
+
+  function thematiquesChoisies() {
+    return choix.thematique ? choix.thematique.split(SEPARATEUR_THEMATIQUES) : [];
+  }
+
+  function aLaThematique(t) { return thematiquesChoisies().indexOf(t) !== -1; }
+
+  function construirePastillesMultiples(conteneurId, valeurs, surChoix) {
+    var conteneur = document.getElementById(conteneurId);
+    conteneur.innerHTML = '';
+    valeurs.forEach(function (valeur) {
+      var bouton = document.createElement('button');
+      bouton.type = 'button';
+      bouton.className = 'pill' + (aLaThematique(valeur) ? ' on' : '');
+      bouton.setAttribute('aria-pressed', aLaThematique(valeur) ? 'true' : 'false');
+      bouton.textContent = valeur;
+      bouton.onclick = function () {
+        var allume = !aLaThematique(valeur);
+        var choisies = thematiquesChoisies();
+        // Reconstruit dans l'ORDRE DE LA LISTE, pas dans l'ordre des touchers : deux
+        // saisies des mêmes tuiles doivent donner la même cellule au classeur.
+        choix.thematique = valeurs.filter(function (v) {
+          return v === valeur ? allume : choisies.indexOf(v) !== -1;
+        }).join(SEPARATEUR_THEMATIQUES);
+        bouton.classList.toggle('on', allume);
+        bouton.setAttribute('aria-pressed', allume ? 'true' : 'false');
+        if (surChoix) surChoix(valeur);
+      };
+      conteneur.appendChild(bouton);
+    });
+  }
+
   function construirePastilles(conteneurId, valeurs, champ, surChoix) {
     var conteneur = document.getElementById(conteneurId);
     conteneur.innerHTML = '';
@@ -1261,8 +1301,8 @@
       document.getElementById('blocExpo').style.display = (valeur === 'Expo') ? 'block' : 'none';
       memoriserContexte();
     });
-    construirePastilles('pillsThematique', listes.thematiques, 'thematique', function (valeur) {
-      document.getElementById('blocPrecision').style.display = (valeur === 'Autre') ? 'block' : 'none';
+    construirePastillesMultiples('pillsThematique', listes.thematiques, function () {
+      document.getElementById('blocPrecision').style.display = aLaThematique('Autre') ? 'block' : 'none';
     });
     construirePastilles('pillsRdvLieu', listes.lieuxRdv || LISTES_REPLI.lieuxRdv, 'rdvLieu', majBlocsRdv);
 
@@ -1584,8 +1624,8 @@
     if (choix.lieu === 'Expo' && !valeur('nomExpo')) {
       return afficherMessage('err', 'Nommez l\'exposition : dans trois mois, personne ne s\'en souviendra.');
     }
-    if (!choix.thematique) { return afficherMessage('err', 'Choisissez la thématique de la demande.'); }
-    if (choix.thematique === 'Autre' && !valeur('precision')) {
+    if (!choix.thematique) { return afficherMessage('err', 'Choisissez au moins une thématique.'); }
+    if (aLaThematique('Autre') && !valeur('precision')) {
       return afficherMessage('err', 'Précisez de quoi il s\'agit.');
     }
     if (!valeur('nom') && !valeur('prenom') && !valeur('telephone') && !email) {
@@ -1870,7 +1910,7 @@
     choix.thematique = '';
     document.getElementById('blocPrecision').style.display = 'none';
     Array.prototype.forEach.call(document.getElementById('pillsThematique').children,
-      function (b) { b.classList.remove('on'); });
+      function (b) { b.classList.remove('on'); b.setAttribute('aria-pressed', 'false'); });
     // Les photos partent avec la fiche : garder celles du visiteur précédent devant le
     // suivant serait la pire erreur possible sur un constat d'état.
     photos = [];
@@ -2155,7 +2195,10 @@
   function resumeConstat() {
     var qui = (valeur('prenom') + ' ' + valeur('nom')).trim();
     var lieu = choix.lieu === 'Expo' ? 'Expo — ' + valeur('nomExpo') : (choix.lieu || '—');
-    var quoi = choix.thematique === 'Autre' ? valeur('precision') : (choix.thematique || '—');
+    // « Autre » cède la place à sa précision, les autres tuiles restent nommées.
+    var quoi = thematiquesChoisies().map(function (t) {
+      return (t === 'Autre' && valeur('precision')) ? valeur('precision') : t;
+    }).join(SEPARATEUR_THEMATIQUES) || '—';
     // Les montants figurent SUR le pavé de signature : la personne doit voir ce
     // qu'elle signe, et c'est bien l'argent qu'elle signe (G19).
     var argent = null;
