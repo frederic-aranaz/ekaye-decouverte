@@ -68,9 +68,6 @@
     }
     .topbar h1  { font-size: 15px; font-weight: 600; color: #e8d8b0; }
     .topbar-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
-    /* La date du script, à la suite du titre : discrète, elle ne doit pas lui
-       disputer la place. Vide tant que le script n'a pas répondu. */
-    .topbar-date { font-size: 11px; font-weight: 400; color: var(--text-3); margin-left: 0.4em; }
     /* Lien vers le classeur, à droite du titre — même geste que sur la page de
        vente. Pas de `margin-left: auto` ici : c'est `.etat-reseau` qui ouvre
        déjà la zone de droite, et deux marges automatiques se partageraient
@@ -482,7 +479,7 @@
   <div class="topbar">
     <div class="topbar-icon">&#9670;</div>
     <div>
-      <h1>Découverte EKAYE<span class="topbar-date" id="dateScript"></span></h1>
+      <h1>Découverte EKAYE</h1>
       <div class="topbar-sub" id="sousTitre">Prise de contact</div>
       <div class="topbar-sub" id="versionPage">Page v13</div>
     </div>
@@ -844,7 +841,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v18';
+  var VERSION_PAGE = 'v19';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -2720,14 +2717,14 @@
   // l'instant. Relu du cache il serait périmé sans qu'on le sache, et un numéro
   // périmé est pire que pas de numéro : on croirait avoir vérifié. Tant que le
   // script n'a pas répondu, la ligne ne porte donc que la version de la page.
-  // La date du script s'écrit À LA SUITE DU TITRE (choix de Frédéric, 22/11) : on la lit
-  // sans chercher. Même règle que le numéro : seulement si elle vient d'une réponse
-  // reçue à l'instant. Un script plus ancien que `@37` n'en envoie pas — rien ne s'affiche.
+  // La date du script termine la ligne de version : « Page v19 · Script @37 — 22/11/2026
+  // à 15h04 » (choix de Frédéric, 22/11 : le titre reste seul). Même règle que le
+  // numéro : seulement si elle vient d'une réponse reçue à l'instant. Un script plus
+  // ancien que `@37` n'en envoie pas — le numéro s'affiche alors seul.
   function afficherVersionScript(numero, date) {
     if (!numero) return;
     document.getElementById('versionPage').textContent =
-      'Page ' + VERSION_PAGE + ' · Script @' + numero;
-    document.getElementById('dateScript').textContent = date ? '· ' + date : '';
+      'Page ' + VERSION_PAGE + ' · Script @' + numero + (date ? ' — ' + date : '');
   }
 
   function chargerListes() {
