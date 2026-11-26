@@ -11,7 +11,7 @@
  * l'ancienne indéfiniment : c'est le seul piège de ce fichier.
  */
 
-var VERSION = 'v19';  // v19 : la date du script termine la ligne de version (22/11/2026)
+var VERSION = 'v20';  // v20 : tuile Qonto dans les modes de paiement (26/11/2026)
 // v11 : lien vers le classeur a droite du titre (16/10/2026)
 // v10 : le refus de cle dit ou chercher (29/09/2026)
 var CACHE = 'ekaye-decouverte-' + VERSION;
