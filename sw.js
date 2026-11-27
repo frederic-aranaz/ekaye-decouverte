@@ -11,7 +11,7 @@
  * l'ancienne indéfiniment : c'est le seul piège de ce fichier.
  */
 
-var VERSION = 'v21';  // v21 : encaisser le solde d'un bon à la livraison (27/11/2026)
+var VERSION = 'v22';  // v22 : solde encaissé par la boutique LAM (27/11/2026)
 // v11 : lien vers le classeur a droite du titre (16/10/2026)
 // v10 : le refus de cle dit ou chercher (29/09/2026)
 var CACHE = 'ekaye-decouverte-' + VERSION;

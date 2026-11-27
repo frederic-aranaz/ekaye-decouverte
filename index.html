@@ -861,7 +861,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v21';
+  var VERSION_PAGE = 'v22';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -2723,6 +2723,9 @@
   var bonsOuverts = [];
   var bonOuvertForm = '';
   var modeSolde = {};
+  // Valeur réservée : le solde encaissé par la boutique LAM (@43). Rien ne part au
+  // registre — la vente y arrive par l'import LAM, sinon elle compterait deux fois.
+  var PAR_LAM = 'Boutique LAM';
   var envoiSoldesEnCours = false;
 
   function sansAccents(t) {
@@ -2785,12 +2788,17 @@
           '<div class="fl">Montant encaissé</div>' +
           '<input type="text" class="fv" id="soldeMontant" inputmode="decimal" autocomplete="off" value="' +
           formaterEuros(reste).replace(' €', '').replace(/\s/g, '') + '">' +
-          '<div class="fl">Mode de paiement</div>' +
-          '<div class="pills" id="pillsSoldeMode">' + listes.modesPaiement.map(function (m) {
+          '<div class="fl">Qui encaisse, et comment</div>' +
+          '<div class="pills" id="pillsSoldeMode">' + listes.modesPaiement.concat([PAR_LAM]).map(function (m) {
             var on = modeSolde[b.idFiche] === m;
             return '<button type="button" class="pill' + (on ? ' on' : '') + '" aria-pressed="' + on +
               '" onclick="choisirModeSolde(\'' + b.idFiche + '\',\'' + m + '\')">' + echapper(m) + '</button>';
           }).join('') + '</div>' +
+          (modeSolde[b.idFiche] === PAR_LAM
+            ? '<div class="bon-detail" style="margin-top:0.4rem">La boutique saisit la vente dans SON registre ' +
+              '(Bénéficiaire : Frédéric, « Solde ' + echapper(b.numeroBon) + ' »). Ici, le bon est seulement ' +
+              'marqué soldé : rien n\'est envoyé à votre registre, la vente y arrive par l\'import LAM.</div>'
+            : '') +
           '<div class="bon-actions">' +
           '<button type="button" class="btn-principal" style="margin:0;width:auto;flex:1" onclick="validerSolde(\'' +
           b.idFiche + '\')">Valider l\'encaissement</button>' +
@@ -2832,13 +2840,16 @@
     if (!mode) { afficherMessage('err', 'Choisissez le mode de paiement du solde.'); return; }
     if (!saisiPar) { afficherMessage('err', 'Indiquez qui encaisse (« Qui saisit », en haut).'); return; }
     var qui = [bon.prenom, bon.nom].filter(Boolean).join(' ');
-    if (!window.confirm('Encaisser ' + formaterEuros(montant) + ' ' + mode + ' sur le bon ' + bon.numeroBon +
-        ' (' + qui + ') ?')) return;
+    var parLam = mode === PAR_LAM;
+    if (!window.confirm((parLam
+        ? 'Marquer ' + formaterEuros(montant) + ' encaissés PAR LA BOUTIQUE LAM sur le bon '
+        : 'Encaisser ' + formaterEuros(montant) + ' ' + mode + ' sur le bon ') + bon.numeroBon +
+        ' (' + qui + ') ?' + (parLam ? '\n\nRien ne sera envoyé à votre registre : la vente y arrivera par l\'import LAM.' : ''))) return;
 
     var enc = {
       idEncaissement: 'S-' + genererIdFiche().replace(/[^A-Za-z0-9-]/g, ''),
       idFiche: idFiche, numeroBon: bon.numeroBon, qui: qui,
-      montant: montant, modePaiement: mode, saisiPar: saisiPar,
+      montant: montant, modePaiement: parLam ? '' : mode, parLam: parLam, saisiPar: saisiPar,
       lieu: choix.lieu || '', date: new Date().toISOString()
     };
     var file = fileSoldes(); file.push(enc);
@@ -2881,11 +2892,11 @@
           var bon = bonsOuverts.find(function (b) { return b.idFiche === enc.idFiche; });
           if (bon && r && typeof r.reste === 'number') bon.reste = r.reste;
           bonsOuverts = bonsOuverts.filter(function (b) { return centimes(b.reste) > 0; });
-          var registreOk = r && String(r.registre || '').indexOf('Versé') === 0;
+          var registreOk = r && (r.parLam || String(r.registre || '').indexOf('Versé') === 0);
           afficherMessage(registreOk || (r && r.dejaEnregistre) ? 'ok' : 'err',
             'Bon ' + enc.numeroBon + ' : ' + formaterEuros(enc.montant) + ' ' + enc.modePaiement + ' inscrit' +
             (r && centimes(r.reste) > 0 ? ', reste ' + formaterEuros(r.reste) : ', bon soldé') + '.' +
-            (r && r.dejaEnregistre ? '' : (registreOk ? ' Registre : fait.' :
+            (r && r.dejaEnregistre ? '' : r && r.parLam ? ' Registre : par l\'import LAM.' : (registreOk ? ' Registre : fait.' :
               ' Registre : NON versé (' + (r && r.registre || '?') + ') — à saisir dans la page de vente.')) +
             (r && r.recu ? ' Reçu envoyé à la cliente.' : ''));
         }
