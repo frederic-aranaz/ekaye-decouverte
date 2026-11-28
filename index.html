@@ -672,6 +672,11 @@
          D'ORIGINE — aucune nouvelle fiche n'est créée, rien d'autre à remplir. -->
     <div class="bons-attente" id="bonsAttente" style="display:none"></div>
 
+    <!-- Rendez-vous sur une fiche existante (v23) : apparaît quand le nom tapé est celui
+         d'une fiche ouverte. Le rendez-vous s'inscrit sur CETTE fiche — aucune nouvelle
+         n'est créée, donc ni second contact Google ni seconde carte Trello. -->
+    <div class="bons-attente" id="rdvAttente" style="display:none"></div>
+
     <div class="fb">
       <div class="fl">Téléphone</div>
       <!-- type=tel : ouvre le pavé numérique, pas le clavier alphabétique -->
@@ -861,7 +866,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v22';
+  var VERSION_PAGE = 'v23';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -870,6 +875,7 @@
   var CLE_LISTES     = 'ekaye_decouverte_listes';
   var CLE_CONTEXTE   = 'ekaye_decouverte_contexte';
   var CLE_FILE_SOLDES = 'ekaye_decouverte_file_soldes';
+  var CLE_FILE_RDV    = 'ekaye_decouverte_file_rdv';
 
   // Repli utilisé au tout premier lancement hors ligne, avant le moindre contact avec
   // le script. Ces listes font AUTORITÉ côté serveur, pas ici : une valeur qui aurait
@@ -1313,6 +1319,10 @@
     // Un script d'avant @41 n'envoie pas la liste : on garde alors celle qu'on a.
     if (nouvelles && Array.isArray(nouvelles.bonsOuverts)) bonsOuverts = nouvelles.bonsOuverts;
     majBonsAttente();
+    // Idem pour les fiches du rendez-vous (@44) : un script plus ancien n'en envoie pas,
+    // et la page garde alors la liste qu'elle avait en cache.
+    if (nouvelles && Array.isArray(nouvelles.fichesRdv)) fichesRdv = nouvelles.fichesRdv;
+    majRdvAttente();
 
     construirePastilles('pillsReglement', REGLEMENTS, 'reglement', appliquerReglement);
     construirePastilles('pillsModePaiement', listes.modesPaiement, 'modePaiement', majSolde);
@@ -1974,6 +1984,7 @@
     chargerListes();
     viderFileAttente();
     viderFileSoldes();
+    viderFileRdv();
   }
 
   // Le prénom du saisisseur reste affiché en permanence : c'est ce qui évite qu'une
@@ -2861,6 +2872,7 @@
       ' Envoi en cours…');
     majBonsAttente();
     viderFileSoldes();
+    viderFileRdv();
   }
 
   function supprimerSolde(idEncaissement) {
@@ -2911,7 +2923,224 @@
 
   ['nom', 'prenom'].forEach(function (id) {
     document.getElementById(id).addEventListener('input', majBonsAttente);
+    document.getElementById(id).addEventListener('input', majRdvAttente);
   });
+
+  /* ── Rendez-vous sur une fiche existante (v23, script @44) ────────────────
+     Le formulaire ne prend un rendez-vous qu'à la CRÉATION d'une fiche. Celui qu'on
+     prend après coup — au téléphone, trois semaines plus tard — n'avait aucune porte :
+     repasser par le formulaire ferait une deuxième fiche, donc un deuxième contact et
+     une deuxième carte. Même mécanique que le solde : la liste des fiches arrive avec
+     les listes et reste en cache, taper le nom la fait remonter, et l'envoi passe par
+     une file d'attente.
+
+     Rejouer la file ne renvoie PAS un second mail : le script reconnaît un rendez-vous
+     déjà posé à son contenu même (même minute, même lieu), sans identifiant à inventer. */
+
+  var fichesRdv = [];
+  var rdvOuvertForm = '';
+  var rdvSaisie = {};
+  var envoiRdvEnCours = false;
+
+  function fileRdv() {
+    try { return JSON.parse(localStorage.getItem(CLE_FILE_RDV) || '[]'); }
+    catch (e) { return []; }
+  }
+  function sauverFileRdv(file) {
+    try { localStorage.setItem(CLE_FILE_RDV, JSON.stringify(file)); return true; }
+    catch (e) { afficherMessage('err', 'Mémoire du téléphone pleine : rendez-vous NON gardé.'); return false; }
+  }
+
+  // Même règle que pour les bons : au moins trois lettres, et on compare les DÉBUTS de
+  // mots sans accents — « laibe » trouve LAIBE, « jean » trouve Jean-François.
+  function fichesRdvCorrespondantes() {
+    var mots = (sansAccents(valeur('nom')) + ' ' + sansAccents(valeur('prenom')))
+      .split(/[\s-]+/).filter(function (m) { return m.length >= 3; });
+    if (!mots.length) return [];
+    return fichesRdv.filter(function (f) {
+      var siens = (sansAccents(f.nom) + ' ' + sansAccents(f.prenom)).split(/[\s-]+/).filter(Boolean);
+      return mots.some(function (m) {
+        return siens.some(function (w) { return w.indexOf(m) === 0; });
+      });
+    });
+  }
+
+  // La saisie en cours, gardée hors du DOM : l'encart se redessine quand on change le
+  // lieu, et des valeurs lues dans les champs seraient perdues à ce moment-là.
+  function saisieRdv(idFiche) {
+    if (!rdvSaisie[idFiche]) {
+      rdvSaisie[idFiche] = { jour: '', heure: '09:00', ou: 'Atelier', adresse: '', email: true };
+    }
+    return rdvSaisie[idFiche];
+  }
+  function majRdvChamp(idFiche, champ, val) {
+    saisieRdv(idFiche)[champ] = val;
+    // Seul le lieu change ce qui est affiché (l'adresse apparaît ou disparaît) : on ne
+    // redessine que là, sinon chaque frappe ferait perdre le curseur.
+    if (champ === 'ou') majRdvAttente();
+  }
+  function ouvrirRdv(idFiche) { rdvOuvertForm = idFiche; majRdvAttente(); }
+  function fermerRdv() { rdvOuvertForm = ''; majRdvAttente(); }
+
+  function majRdvAttente() {
+    var box = document.getElementById('rdvAttente');
+    if (!box) return;
+    var fiches = fichesRdvCorrespondantes();
+    var file = fileRdv();
+    var lieux = (listes && listes.lieuxRdv) || LISTES_REPLI.lieuxRdv;
+    var html = fiches.map(function (f) {
+      var qui = [f.prenom, f.nom].filter(Boolean).join(' ');
+      var attente = file.filter(function (e) { return e.idFiche === f.idFiche; });
+      var lignesAttente = attente.map(function (e) {
+        return '<div class="bon-detail">&#128337; ' + echapper(e.resume) + ' en attente d\'envoi' +
+          (e.derniereErreur ? '</div><div class="bon-erreur">&#9888; ' + echapper(e.derniereErreur) +
+            ' <button type="button" class="btn-second" onclick="supprimerRdv(\'' + e.idRdv +
+            '\')">Supprimer</button>' : '') + '</div>';
+      }).join('');
+      var entete = '<div>' + echapper(qui) + '</div>' +
+        '<div class="bon-detail">' +
+        echapper([f.objet, f.date ? 'du ' + f.date : ''].filter(Boolean).join(' · ')) +
+        (f.rdv ? ' · <strong>rendez-vous noté : ' + echapper(f.rdv.quand + ' · ' + f.rdv.ou) + '</strong>' : '') +
+        '</div>' + lignesAttente;
+
+      var corps;
+      if (rdvOuvertForm === f.idFiche) {
+        var s = saisieRdv(f.idFiche);
+        var pastilles = lieux.map(function (l) {
+          var on = s.ou === l;
+          return '<button type="button" class="pill' + (on ? ' on' : '') + '" aria-pressed="' + on +
+            '" onclick="majRdvChamp(\'' + f.idFiche + '\',\'ou\',\'' + l + '\')">' + echapper(l) + '</button>';
+        }).join('');
+        corps = '<div class="bon-form">' +
+          '<div class="fl">Jour</div>' +
+          '<input type="date" class="fv" value="' + echapper(s.jour) +
+          '" oninput="majRdvChamp(\'' + f.idFiche + '\',\'jour\',this.value)">' +
+          '<div class="fl">Heure</div>' +
+          '<input type="time" class="fv" step="300" value="' + echapper(s.heure) +
+          '" oninput="majRdvChamp(\'' + f.idFiche + '\',\'heure\',this.value)">' +
+          '<div class="fl">Où</div><div class="pills">' + pastilles + '</div>' +
+          (s.ou === 'Autre adresse'
+            ? '<div class="fl">Adresse où se rendre</div><input type="text" class="fv" value="' +
+              echapper(s.adresse) + '" oninput="majRdvChamp(\'' + f.idFiche +
+              '\',\'adresse\',this.value)">'
+            : '') +
+          (f.email
+            ? '<label class="bon-detail" style="display:block;margin-top:0.5rem">' +
+              '<input type="checkbox"' + (s.email ? ' checked' : '') +
+              ' onchange="majRdvChamp(\'' + f.idFiche + '\',\'email\',this.checked)"> ' +
+              'Envoyer la confirmation à ' + echapper(f.email) + '</label>'
+            : '<div class="bon-detail" style="margin-top:0.5rem">Pas d\'email sur la fiche : ' +
+              'aucune confirmation ne partira.</div>') +
+          '<div class="bon-actions">' +
+          '<button type="button" class="btn-principal" style="margin:0;width:auto;flex:1" onclick="validerRdv(\'' +
+          f.idFiche + '\')">' + (f.rdv ? 'Déplacer le rendez-vous' : 'Noter le rendez-vous') + '</button>' +
+          '<button type="button" class="btn-second" onclick="fermerRdv()">Annuler</button>' +
+          '</div></div>';
+      } else {
+        corps = '<div class="bon-actions"><div style="flex:1">' +
+          (f.rdv ? 'Un rendez-vous est déjà noté.' : 'Aucun rendez-vous noté.') + '</div>' +
+          '<button type="button" class="btn-second" onclick="ouvrirRdv(\'' + f.idFiche + '\')">' +
+          (f.rdv ? 'Déplacer' : 'Noter un rendez-vous') + '</button></div>';
+      }
+      return '<div class="bon-attente">' + entete + corps + '</div>';
+    }).join('');
+    box.innerHTML = html;
+    box.style.display = html ? 'block' : 'none';
+  }
+
+  // Le créneau en toutes lettres, pour la confirmation à l'écran et la file d'attente.
+  // Le script le réécrira à sa façon pour le client ; ici c'est pour l'œil de Frédéric.
+  function rdvEnToutesLettres(jour, heure) {
+    var JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+    var MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août',
+      'septembre', 'octobre', 'novembre', 'décembre'];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(jour) || !/^\d{1,2}:\d{2}$/.test(heure)) return '';
+    var p = jour.split('-'), q = heure.split(':');
+    var d = new Date(+p[0], +p[1] - 1, +p[2], +q[0], +q[1]);
+    if (isNaN(d.getTime()) || d.getDate() !== +p[2]) return '';
+    return JOURS[d.getDay()] + ' ' + d.getDate() + ' ' + MOIS[d.getMonth()] + ' ' + d.getFullYear() +
+      ' à ' + d.getHours() + 'h' + (d.getMinutes() ? (d.getMinutes() < 10 ? '0' : '') + d.getMinutes() : '');
+  }
+
+  function validerRdv(idFiche) {
+    var f = fichesRdv.find(function (x) { return x.idFiche === idFiche; });
+    if (!f) return;
+    var s = saisieRdv(idFiche);
+    var lettres = rdvEnToutesLettres(s.jour, s.heure);
+    if (!lettres) { afficherMessage('err', 'Jour ou heure du rendez-vous illisible.'); return; }
+    if (!s.ou) { afficherMessage('err', 'Choisissez où se tient le rendez-vous.'); return; }
+    if (s.ou === 'Autre adresse' && !s.adresse.trim()) {
+      afficherMessage('err', '« Autre adresse » demande l\'adresse où se rendre.');
+      return;
+    }
+    var qui = [f.prenom, f.nom].filter(Boolean).join(' ');
+    var resume = lettres + ' · ' + s.ou;
+    var envoiMail = !!(f.email && s.email);
+    if (!window.confirm((f.rdv ? 'DÉPLACER le rendez-vous de ' : 'Noter le rendez-vous de ') + qui +
+      ' :\n' + resume + (f.rdv ? '\n(il était le ' + f.rdv.quand + ')' : '') +
+      (envoiMail ? '\n\nUne confirmation partira à ' + f.email + '.' : '\n\nAucune confirmation ne partira.'))) return;
+
+    var rdv = {
+      idRdv: 'R-' + genererIdFiche().replace(/[^A-Za-z0-9-]/g, ''),
+      idFiche: idFiche, qui: qui, resume: resume,
+      jour: s.jour, heure: s.heure, ou: s.ou,
+      adresse: s.ou === 'Autre adresse' ? s.adresse.trim() : '',
+      email: envoiMail, date: new Date().toISOString()
+    };
+    var file = fileRdv(); file.push(rdv);
+    if (!sauverFileRdv(file)) return;
+    rdvOuvertForm = '';
+    // La liste locale porte tout de suite le nouveau créneau : hors ligne, c'est le seul
+    // endroit où Frédéric peut relire ce qu'il vient de poser.
+    f.rdv = { quand: resume, ou: s.ou, adresse: rdv.adresse };
+    afficherMessage('ok', 'Rendez-vous gardé pour ' + qui + ' — ' + resume + '. Envoi en cours…');
+    majRdvAttente();
+    viderFileRdv();
+  }
+
+  function supprimerRdv(idRdv) {
+    if (!window.confirm('Supprimer ce rendez-vous ? Il ne sera jamais envoyé.')) return;
+    sauverFileRdv(fileRdv().filter(function (e) { return e.idRdv !== idRdv; }));
+    majRdvAttente();
+  }
+
+  function viderFileRdv() {
+    if (envoiRdvEnCours || !fileRdv().length) return;
+    envoiRdvEnCours = true;
+    envoyerRdvPas_(fileRdv().map(function (e) { return e.idRdv; }));
+  }
+
+  function envoyerRdvPas_(ids) {
+    if (!ids.length) { envoiRdvEnCours = false; majRdvAttente(); return; }
+    var rdv = fileRdv().find(function (e) { return e.idRdv === ids[0]; });
+    if (!rdv) { envoyerRdvPas_(ids.slice(1)); return; }
+    appelApi('poserRendezVous', {
+      idFiche: rdv.idFiche, jour: rdv.jour, heure: rdv.heure,
+      ou: rdv.ou, adresse: rdv.adresse, email: rdv.email
+    })
+      .then(function (r) {
+        var file = fileRdv();
+        if (r && r.erreur) {
+          var e = file.find(function (x) { return x.idRdv === rdv.idRdv; });
+          if (e) e.derniereErreur = r.erreur;
+          sauverFileRdv(file);
+          afficherMessage('err', 'Rendez-vous de ' + rdv.qui + ' refusé : ' + r.erreur);
+        } else {
+          sauverFileRdv(file.filter(function (x) { return x.idRdv !== rdv.idRdv; }));
+          var f = fichesRdv.find(function (x) { return x.idFiche === rdv.idFiche; });
+          if (f && r && r.quand) f.rdv = { quand: r.quand, ou: r.ou || rdv.ou, adresse: rdv.adresse };
+          afficherMessage('ok', (r && r.dejaPose ? 'Rendez-vous déjà noté pour ' : 'Rendez-vous inscrit pour ') +
+            rdv.qui + ' — ' + (r && r.quandEnToutesLettres ? r.quandEnToutesLettres : rdv.resume) + '.' +
+            (r && r.confirmation ? ' Confirmation envoyée à ' + r.confirmation + '.' : ''));
+        }
+        envoyerRdvPas_(ids.slice(1));
+      })
+      .catch(function (err) {
+        envoiRdvEnCours = false;
+        majRdvAttente();
+        if (err && (err.authRefusee || err.cleManquante)) afficherMessage('err', err.message);
+      });
+  }
 
   /* ── État du réseau ─────────────────────────────────────────────────────── */
 
@@ -2933,6 +3162,7 @@
     majEtatReseau();
     viderFileAttente();
     viderFileSoldes();
+    viderFileRdv();
     chargerListes();
   });
   window.addEventListener('offline', majEtatReseau);
@@ -3036,6 +3266,7 @@
     chargerListes();
     viderFileAttente();
     viderFileSoldes();
+    viderFileRdv();
   }
 
   /* ── Service worker ─────────────────────────────────────────────────────
