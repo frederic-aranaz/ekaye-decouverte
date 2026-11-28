@@ -552,7 +552,12 @@
         <input type="date" class="fv" id="rdvJour" aria-label="Jour du rendez-vous">
         <input type="time" class="fv" id="rdvHeure" step="300" aria-label="Heure du rendez-vous">
       </div>
-      <div class="aide">Laisser vide s'il n'y a pas de rendez-vous. Durée : 1 h.</div>
+      <div class="aide">Laisser vide s'il n'y a pas de rendez-vous.</div>
+    </div>
+
+    <div class="fb" id="blocRdvDuree" style="display:none">
+      <div class="fl">Il dure</div>
+      <div class="pills" id="pillsRdvDuree"></div>
     </div>
 
     <div class="fb" id="blocRdvOu" style="display:none">
@@ -866,7 +871,7 @@
 
   // Doit suivre VERSION dans sw.js — affichée dans les réglages pour qu'on sache, depuis
   // le téléphone, si la page servie est bien la dernière publiée.
-  var VERSION_PAGE = 'v23';
+  var VERSION_PAGE = 'v24';
 
   var CLE_URL        = 'ekaye_decouverte_url_api';
   var CLE_ACCES      = 'ekaye_decouverte_cle';
@@ -884,6 +889,10 @@
     lieux: ['Atelier', 'Expo', 'Boutique LAM', 'Chez le client',
       'Téléphone', 'Email', 'SMS', 'WhatsApp', 'Chat Brevo'],
     lieuxRdv: ['Chez le client', 'Atelier', 'Autre adresse'],
+    dureesRdv: [{ minutes: 30, libelle: '30 min' }, { minutes: 60, libelle: '1 h' },
+      { minutes: 90, libelle: '1 h 30' }, { minutes: 120, libelle: '2 h' },
+      { minutes: 180, libelle: '3 h' }, { minutes: 240, libelle: '4 h' },
+      { minutes: 420, libelle: '7 h' }],
     thematiques: ['Création', 'Réparation', 'Demande de RDV atelier', 'Atelier', 'Vente',
       'Livraison', 'Installation', 'Autre'],
     saisisseurs: ['Frédéric', 'Manuela'],
@@ -1314,7 +1323,8 @@
       thematiques: (nouvelles && nouvelles.thematiques) || LISTES_REPLI.thematiques,
       saisisseurs: (nouvelles && nouvelles.saisisseurs) || LISTES_REPLI.saisisseurs,
       modesPaiement: (nouvelles && nouvelles.modesPaiement) || LISTES_REPLI.modesPaiement,
-      expos: (nouvelles && nouvelles.expos) || []
+      expos: (nouvelles && nouvelles.expos) || [],
+      dureesRdv: (nouvelles && nouvelles.dureesRdv) || LISTES_REPLI.dureesRdv
     };
     // Un script d'avant @41 n'envoie pas la liste : on garde alors celle qu'on a.
     if (nouvelles && Array.isArray(nouvelles.bonsOuverts)) bonsOuverts = nouvelles.bonsOuverts;
@@ -1339,6 +1349,8 @@
       document.getElementById('blocPrecision').style.display = aLaThematique('Autre') ? 'block' : 'none';
     });
     construirePastilles('pillsRdvLieu', listes.lieuxRdv || LISTES_REPLI.lieuxRdv, 'rdvLieu', majBlocsRdv);
+    construirePastilles('pillsRdvDuree', dureesRdvListe().map(function (d) { return d.libelle; }),
+      'rdvDuree', majBlocsRdv);
 
     // Le jour seul ne suffit pas à ouvrir les sous-blocs : c'est l'heure qui fait le
     // rendez-vous. Les deux champs les surveillent donc tous les deux.
@@ -1365,6 +1377,13 @@
   /* Un rendez-vous n'existe que si le jour ET l'heure sont posés : une date sans heure
      donnerait un événement d'une heure à minuit, ce qui ne veut rien dire. Tant qu'il
      n'existe pas, les sous-blocs restent fermés et rien ne part au serveur. */
+  // Le libellé choisi en pastille, ramené à ses minutes. Rien de choisi : une heure,
+  // ce que valait tout rendez-vous avant que la durée existe.
+  function minutesDeLaDuree(libelle) {
+    var trouve = dureesRdvListe().filter(function (d) { return d.libelle === libelle; })[0];
+    return trouve ? trouve.minutes : 60;
+  }
+
   function rdvComplet() {
     return !!valeur('rdvJour') && !!valeur('rdvHeure');
   }
@@ -1372,6 +1391,7 @@
   function majBlocsRdv() {
     var actif = rdvComplet();
     document.getElementById('blocRdvOu').style.display = actif ? 'block' : 'none';
+    document.getElementById('blocRdvDuree').style.display = actif ? 'block' : 'none';
 
     // Un défaut proposé, jamais imposé : à distance ou déjà chez lui, on va chez le
     // client ; sinon on le reçoit. Posé seulement si Frédéric n'a rien choisi lui-même.
@@ -1723,6 +1743,8 @@
         : '',
       rdvLieu: rdvComplet() ? choix.rdvLieu : '',
       rdvAdresse: rdvComplet() ? valeur('rdvAdresse') : '',
+      // En minutes : le libellé (« 1 h 30 ») est pour l'œil, le script veut un nombre.
+      rdvDuree: rdvComplet() ? minutesDeLaDuree(choix.rdvDuree) : '',
       accordRecontact: accord,
       photos: photosPourEnvoi(),
       signature: signaturePourEnvoi(),
@@ -2969,7 +2991,8 @@
   // lieu, et des valeurs lues dans les champs seraient perdues à ce moment-là.
   function saisieRdv(idFiche) {
     if (!rdvSaisie[idFiche]) {
-      rdvSaisie[idFiche] = { jour: '', heure: '09:00', ou: 'Atelier', adresse: '', email: true };
+      rdvSaisie[idFiche] = { jour: '', heure: '09:00', duree: 60, ou: 'Atelier',
+        adresse: '', email: true };
     }
     return rdvSaisie[idFiche];
   }
@@ -2977,10 +3000,16 @@
     saisieRdv(idFiche)[champ] = val;
     // Seul le lieu change ce qui est affiché (l'adresse apparaît ou disparaît) : on ne
     // redessine que là, sinon chaque frappe ferait perdre le curseur.
-    if (champ === 'ou') majRdvAttente();
+    if (champ === 'ou' || champ === 'duree') majRdvAttente();
   }
   function ouvrirRdv(idFiche) { rdvOuvertForm = idFiche; majRdvAttente(); }
   function fermerRdv() { rdvOuvertForm = ''; majRdvAttente(); }
+
+  // Les durées proposées : celles du script quand il les envoie, le repli sinon — une
+  // page lancée hors ligne pour la première fois doit quand même savoir les afficher.
+  function dureesRdvListe() {
+    return (listes && listes.dureesRdv) || LISTES_REPLI.dureesRdv;
+  }
 
   function majRdvAttente() {
     var box = document.getElementById('rdvAttente');
@@ -2988,6 +3017,7 @@
     var fiches = fichesRdvCorrespondantes();
     var file = fileRdv();
     var lieux = (listes && listes.lieuxRdv) || LISTES_REPLI.lieuxRdv;
+    var durees = dureesRdvListe();
     var html = fiches.map(function (f) {
       var qui = [f.prenom, f.nom].filter(Boolean).join(' ');
       var attente = file.filter(function (e) { return e.idFiche === f.idFiche; });
@@ -3000,12 +3030,20 @@
       var entete = '<div>' + echapper(qui) + '</div>' +
         '<div class="bon-detail">' +
         echapper([f.objet, f.date ? 'du ' + f.date : ''].filter(Boolean).join(' · ')) +
-        (f.rdv ? ' · <strong>rendez-vous noté : ' + echapper(f.rdv.quand + ' · ' + f.rdv.ou) + '</strong>' : '') +
+        (f.rdv ? ' · <strong>rendez-vous noté : ' +
+          echapper(f.rdv.quand + (f.rdv.dureeLibelle ? ' · ' + f.rdv.dureeLibelle : '') +
+            ' · ' + f.rdv.ou) + '</strong>' : '') +
         '</div>' + lignesAttente;
 
       var corps;
       if (rdvOuvertForm === f.idFiche) {
         var s = saisieRdv(f.idFiche);
+        var pastillesDuree = durees.map(function (d) {
+          var on = Number(s.duree) === Number(d.minutes);
+          return '<button type="button" class="pill' + (on ? ' on' : '') + '" aria-pressed="' + on +
+            '" onclick="majRdvChamp(\'' + f.idFiche + '\',\'duree\',' + d.minutes + ')">' +
+            echapper(d.libelle) + '</button>';
+        }).join('');
         var pastilles = lieux.map(function (l) {
           var on = s.ou === l;
           return '<button type="button" class="pill' + (on ? ' on' : '') + '" aria-pressed="' + on +
@@ -3018,6 +3056,7 @@
           '<div class="fl">Heure</div>' +
           '<input type="time" class="fv" step="300" value="' + echapper(s.heure) +
           '" oninput="majRdvChamp(\'' + f.idFiche + '\',\'heure\',this.value)">' +
+          '<div class="fl">Durée</div><div class="pills">' + pastillesDuree + '</div>' +
           '<div class="fl">Où</div><div class="pills">' + pastilles + '</div>' +
           (s.ou === 'Autre adresse'
             ? '<div class="fl">Adresse où se rendre</div><input type="text" class="fv" value="' +
@@ -3074,7 +3113,10 @@
       return;
     }
     var qui = [f.prenom, f.nom].filter(Boolean).join(' ');
-    var resume = lettres + ' · ' + s.ou;
+    var libelleDuree = (dureesRdvListe().find(function (d) {
+      return Number(d.minutes) === Number(s.duree);
+    }) || { libelle: s.duree + ' min' }).libelle;
+    var resume = lettres + ' · ' + libelleDuree + ' · ' + s.ou;
     var envoiMail = !!(f.email && s.email);
     if (!window.confirm((f.rdv ? 'DÉPLACER le rendez-vous de ' : 'Noter le rendez-vous de ') + qui +
       ' :\n' + resume + (f.rdv ? '\n(il était le ' + f.rdv.quand + ')' : '') +
@@ -3083,7 +3125,7 @@
     var rdv = {
       idRdv: 'R-' + genererIdFiche().replace(/[^A-Za-z0-9-]/g, ''),
       idFiche: idFiche, qui: qui, resume: resume,
-      jour: s.jour, heure: s.heure, ou: s.ou,
+      jour: s.jour, heure: s.heure, duree: s.duree, ou: s.ou,
       adresse: s.ou === 'Autre adresse' ? s.adresse.trim() : '',
       email: envoiMail, date: new Date().toISOString()
     };
@@ -3092,7 +3134,7 @@
     rdvOuvertForm = '';
     // La liste locale porte tout de suite le nouveau créneau : hors ligne, c'est le seul
     // endroit où Frédéric peut relire ce qu'il vient de poser.
-    f.rdv = { quand: resume, ou: s.ou, adresse: rdv.adresse };
+    f.rdv = { quand: resume, ou: s.ou, adresse: rdv.adresse, dureeLibelle: '' };
     afficherMessage('ok', 'Rendez-vous gardé pour ' + qui + ' — ' + resume + '. Envoi en cours…');
     majRdvAttente();
     viderFileRdv();
@@ -3115,7 +3157,7 @@
     var rdv = fileRdv().find(function (e) { return e.idRdv === ids[0]; });
     if (!rdv) { envoyerRdvPas_(ids.slice(1)); return; }
     appelApi('poserRendezVous', {
-      idFiche: rdv.idFiche, jour: rdv.jour, heure: rdv.heure,
+      idFiche: rdv.idFiche, jour: rdv.jour, heure: rdv.heure, duree: rdv.duree,
       ou: rdv.ou, adresse: rdv.adresse, email: rdv.email
     })
       .then(function (r) {
@@ -3128,7 +3170,10 @@
         } else {
           sauverFileRdv(file.filter(function (x) { return x.idRdv !== rdv.idRdv; }));
           var f = fichesRdv.find(function (x) { return x.idFiche === rdv.idFiche; });
-          if (f && r && r.quand) f.rdv = { quand: r.quand, ou: r.ou || rdv.ou, adresse: rdv.adresse };
+          if (f && r && r.quand) {
+            f.rdv = { quand: r.quand, ou: r.ou || rdv.ou, adresse: rdv.adresse,
+              dureeLibelle: r.dureeLibelle || '' };
+          }
           afficherMessage('ok', (r && r.dejaPose ? 'Rendez-vous déjà noté pour ' : 'Rendez-vous inscrit pour ') +
             rdv.qui + ' — ' + (r && r.quandEnToutesLettres ? r.quandEnToutesLettres : rdv.resume) + '.' +
             (r && r.confirmation ? ' Confirmation envoyée à ' + r.confirmation + '.' : ''));
